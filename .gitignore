@@ -1,0 +1,8 @@
+# Virtual environments anywhere in the repo
+**/.venv/
+**/venv/
+**/env/
+
+# Python caches
+**/__pycache__/
+*.py[cod]
