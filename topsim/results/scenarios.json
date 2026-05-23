@@ -1,0 +1,208 @@
+{
+  "manifest": "demo/scenario_manifest.jsonl",
+  "scenarios": [
+    {
+      "id": "healthy",
+      "matrix": "demo/healthy_matrix.txt",
+      "metadata": {
+        "phase": "dispatch",
+        "placement_id": "baseline",
+        "scenario_id": "healthy",
+        "view_id": 0
+      },
+      "results": [
+        {
+          "algorithmic_bandwidth_GBps": 768.4901355792522,
+          "best_lower_bound_us": 132.75,
+          "bottlenecks": {
+            "critical_resource": "server0->server1",
+            "stages": 1,
+            "worst_receiver_gpu": 0,
+            "worst_receiver_server": 0,
+            "worst_sender_gpu": 1,
+            "worst_sender_server": 0,
+            "worst_server_pair": "server0->server1"
+          },
+          "completion_time_ms": 0.13819305555555553,
+          "completion_time_us": 138.19305555555553,
+          "engine": "stage",
+          "lower_bounds_us": {
+            "cluster_scaleout": 132.75,
+            "local_gpu_scaleup": 0.0,
+            "local_server_scaleup": 0.0,
+            "server_recv": 132.75,
+            "server_send": 132.75
+          },
+          "metadata": {
+            "phase": "dispatch",
+            "placement_id": "baseline",
+            "scenario_id": "healthy",
+            "view_id": 0
+          },
+          "notes": [],
+          "phase_breakdown_us": {
+            "balance": 0.12152777777777778,
+            "local_intra": 0.0,
+            "redistribute_unhidden": 0.12152777777777778,
+            "scale_out": 137.75,
+            "scheduling": 0.2
+          },
+          "policy": "fast",
+          "slowdown_vs_lb": 1.041002301736765,
+          "total_bytes": 106200000.0,
+          "utilization": {},
+          "warnings": []
+        }
+      ],
+      "topology": {
+        "gpus_per_server": 8,
+        "name": "synthetic-two-tier",
+        "num_gpus": 16,
+        "num_servers": 2,
+        "original_num_gpus": 16,
+        "scaleout_gbps": 400.0,
+        "scaleup_gbps": 3600.0,
+        "virtual_gpus": []
+      },
+      "warnings": []
+    },
+    {
+      "id": "replicated_steady_state",
+      "matrix": "demo/replicated_matrix.txt",
+      "metadata": {
+        "phase": "dispatch",
+        "placement_id": "replicated",
+        "repair_policy": "steady_state",
+        "scenario_id": "replicated_steady_state",
+        "view_id": 0
+      },
+      "results": [
+        {
+          "algorithmic_bandwidth_GBps": 773.8479091224763,
+          "best_lower_bound_us": 162.5,
+          "bottlenecks": {
+            "critical_resource": "server0->server1",
+            "stages": 1,
+            "worst_receiver_gpu": 0,
+            "worst_receiver_server": 0,
+            "worst_sender_gpu": 1,
+            "worst_sender_server": 0,
+            "worst_server_pair": "server0->server1"
+          },
+          "completion_time_ms": 0.16799166666666668,
+          "completion_time_us": 167.99166666666667,
+          "engine": "stage",
+          "lower_bounds_us": {
+            "cluster_scaleout": 162.5,
+            "local_gpu_scaleup": 0.0,
+            "local_server_scaleup": 0.0,
+            "server_recv": 162.5,
+            "server_send": 162.5
+          },
+          "metadata": {
+            "phase": "dispatch",
+            "placement_id": "replicated",
+            "repair_policy": "steady_state",
+            "scenario_id": "replicated_steady_state",
+            "view_id": 0
+          },
+          "notes": [],
+          "phase_breakdown_us": {
+            "balance": 0.14583333333333334,
+            "local_intra": 0.0,
+            "redistribute_unhidden": 0.14583333333333334,
+            "scale_out": 167.5,
+            "scheduling": 0.2
+          },
+          "policy": "fast",
+          "slowdown_vs_lb": 1.033794871794872,
+          "total_bytes": 130000000.0,
+          "utilization": {},
+          "warnings": []
+        }
+      ],
+      "topology": {
+        "gpus_per_server": 8,
+        "name": "synthetic-two-tier",
+        "num_gpus": 16,
+        "num_servers": 2,
+        "original_num_gpus": 16,
+        "scaleout_gbps": 400.0,
+        "scaleup_gbps": 3600.0,
+        "virtual_gpus": []
+      },
+      "warnings": []
+    },
+    {
+      "id": "gpu7_failed_repaired",
+      "matrix": "demo/failed_gpu7_repaired_matrix.txt",
+      "metadata": {
+        "failed_gpus": [
+          7
+        ],
+        "phase": "dispatch",
+        "repair_policy": "nearest_replica",
+        "scenario_id": "gpu7_failed_repaired",
+        "view_id": 1
+      },
+      "results": [
+        {
+          "algorithmic_bandwidth_GBps": 726.3646806172901,
+          "best_lower_bound_us": 152.25,
+          "bottlenecks": {
+            "critical_resource": "server1->server0",
+            "stages": 2,
+            "worst_receiver_gpu": 0,
+            "worst_receiver_server": 0,
+            "worst_sender_gpu": 1,
+            "worst_sender_server": 1,
+            "worst_server_pair": "server1->server0"
+          },
+          "completion_time_ms": 0.16685833333333336,
+          "completion_time_us": 166.85833333333335,
+          "engine": "stage",
+          "lower_bounds_us": {
+            "cluster_scaleout": 151.5,
+            "local_gpu_scaleup": 0.0,
+            "local_server_scaleup": 0.0,
+            "server_recv": 152.25,
+            "server_send": 152.25
+          },
+          "metadata": {
+            "failed_gpus": [
+              7
+            ],
+            "phase": "dispatch",
+            "repair_policy": "nearest_replica",
+            "scenario_id": "gpu7_failed_repaired",
+            "view_id": 1
+          },
+          "notes": [],
+          "phase_breakdown_us": {
+            "balance": 2.09375,
+            "local_intra": 0.0,
+            "redistribute_unhidden": 2.1145833333333335,
+            "scale_out": 162.25,
+            "scheduling": 0.4
+          },
+          "policy": "fast",
+          "slowdown_vs_lb": 1.0959496442255063,
+          "total_bytes": 121200000.0,
+          "utilization": {},
+          "warnings": []
+        }
+      ],
+      "topology": {
+        "gpus_per_server": 8,
+        "name": "synthetic-two-tier",
+        "num_gpus": 16,
+        "num_servers": 2,
+        "original_num_gpus": 16,
+        "scaleout_gbps": 400.0,
+        "scaleup_gbps": 3600.0,
+        "virtual_gpus": []
+      },
+      "warnings": []
+    }
+  ]
+}
