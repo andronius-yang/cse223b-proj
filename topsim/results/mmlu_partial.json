@@ -1,0 +1,1580 @@
+{
+  "manifest": "../traffic-gen/out/mmlu_english_partial/manifest_network.jsonl",
+  "scenarios": [
+    {
+      "id": "aggregate_network",
+      "matrix": "../traffic-gen/out/mmlu_english_partial/aggregate_network.txt",
+      "metadata": {
+        "scenario_id": "aggregate_network",
+        "source": "traffic-gen",
+        "variant": "network"
+      },
+      "results": [
+        {
+          "algorithmic_bandwidth_GBps": 1254.353743967448,
+          "best_lower_bound_us": 1301.0176,
+          "bottlenecks": {
+            "critical_resource": "server1->server0",
+            "stages": 2,
+            "worst_receiver_gpu": 5,
+            "worst_receiver_server": 0,
+            "worst_sender_gpu": 9,
+            "worst_sender_server": 1,
+            "worst_server_pair": "server1->server0"
+          },
+          "completion_time_ms": 1.5075249777777782,
+          "completion_time_us": 1507.524977777778,
+          "engine": "stage",
+          "lower_bounds_us": {
+            "cluster_scaleout": 1271.9488,
+            "local_gpu_scaleup": 180.97493333333333,
+            "local_server_scaleup": 123.50577777777778,
+            "server_recv": 1301.0176,
+            "server_send": 1301.0176
+          },
+          "metadata": {
+            "scenario_id": "aggregate_network",
+            "source": "traffic-gen",
+            "variant": "network"
+          },
+          "notes": [],
+          "phase_breakdown_us": {
+            "balance": 1.658311111111111,
+            "local_intra": 180.97493333333333,
+            "redistribute_unhidden": 13.474133333333333,
+            "scale_out": 1311.0176000000001,
+            "scheduling": 0.4
+          },
+          "policy": "fast",
+          "slowdown_vs_lb": 1.158727581992571,
+          "total_bytes": 1890969600.0,
+          "utilization": {},
+          "warnings": []
+        }
+      ],
+      "topology": {
+        "gpus_per_server": 8,
+        "name": "synthetic-two-tier",
+        "num_gpus": 16,
+        "num_servers": 2,
+        "original_num_gpus": 16,
+        "scaleout_gbps": 400.0,
+        "scaleup_gbps": 3600.0,
+        "virtual_gpus": []
+      },
+      "warnings": []
+    },
+    {
+      "id": "layer_1_network",
+      "matrix": "../traffic-gen/out/mmlu_english_partial/layer_1_network.txt",
+      "metadata": {
+        "scenario_id": "layer_1_network",
+        "source": "traffic-gen",
+        "variant": "network"
+      },
+      "results": [
+        {
+          "algorithmic_bandwidth_GBps": 812.8528925619836,
+          "best_lower_bound_us": 63.1296,
+          "bottlenecks": {
+            "critical_resource": "server0->server1",
+            "stages": 2,
+            "worst_receiver_gpu": 14,
+            "worst_receiver_server": 1,
+            "worst_sender_gpu": 13,
+            "worst_sender_server": 0,
+            "worst_server_pair": "server0->server1"
+          },
+          "completion_time_ms": 0.0968,
+          "completion_time_us": 96.8,
+          "engine": "stage",
+          "lower_bounds_us": {
+            "cluster_scaleout": 51.4944,
+            "local_gpu_scaleup": 20.935111111111112,
+            "local_server_scaleup": 6.422755555555556,
+            "server_recv": 63.1296,
+            "server_send": 63.1296
+          },
+          "metadata": {
+            "scenario_id": "layer_1_network",
+            "source": "traffic-gen",
+            "variant": "network"
+          },
+          "notes": [],
+          "phase_breakdown_us": {
+            "balance": 0.1216,
+            "local_intra": 20.935111111111112,
+            "redistribute_unhidden": 2.213688888888889,
+            "scale_out": 73.1296,
+            "scheduling": 0.4
+          },
+          "policy": "fast",
+          "slowdown_vs_lb": 1.533353609083536,
+          "total_bytes": 78684160.0,
+          "utilization": {},
+          "warnings": []
+        }
+      ],
+      "topology": {
+        "gpus_per_server": 8,
+        "name": "synthetic-two-tier",
+        "num_gpus": 16,
+        "num_servers": 2,
+        "original_num_gpus": 16,
+        "scaleout_gbps": 400.0,
+        "scaleup_gbps": 3600.0,
+        "virtual_gpus": []
+      },
+      "warnings": []
+    },
+    {
+      "id": "layer_11_network",
+      "matrix": "../traffic-gen/out/mmlu_english_partial/layer_11_network.txt",
+      "metadata": {
+        "scenario_id": "layer_11_network",
+        "source": "traffic-gen",
+        "variant": "network"
+      },
+      "results": [
+        {
+          "algorithmic_bandwidth_GBps": 832.2691988733571,
+          "best_lower_bound_us": 66.9952,
+          "bottlenecks": {
+            "critical_resource": "server0->server1",
+            "stages": 2,
+            "worst_receiver_gpu": 13,
+            "worst_receiver_server": 1,
+            "worst_sender_gpu": 6,
+            "worst_sender_server": 0,
+            "worst_server_pair": "server0->server1"
+          },
+          "completion_time_ms": 0.09518151111111112,
+          "completion_time_us": 95.18151111111112,
+          "engine": "stage",
+          "lower_bounds_us": {
+            "cluster_scaleout": 57.1008,
+            "local_gpu_scaleup": 14.586311111111112,
+            "local_server_scaleup": 5.6519111111111116,
+            "server_recv": 66.9952,
+            "server_send": 66.9952
+          },
+          "metadata": {
+            "scenario_id": "layer_11_network",
+            "source": "traffic-gen",
+            "variant": "network"
+          },
+          "notes": [],
+          "phase_breakdown_us": {
+            "balance": 0.19164444444444445,
+            "local_intra": 14.586311111111112,
+            "redistribute_unhidden": 3.0083555555555557,
+            "scale_out": 76.9952,
+            "scheduling": 0.4
+          },
+          "policy": "fast",
+          "slowdown_vs_lb": 1.4207213518447759,
+          "total_bytes": 79216640.0,
+          "utilization": {},
+          "warnings": []
+        }
+      ],
+      "topology": {
+        "gpus_per_server": 8,
+        "name": "synthetic-two-tier",
+        "num_gpus": 16,
+        "num_servers": 2,
+        "original_num_gpus": 16,
+        "scaleout_gbps": 400.0,
+        "scaleup_gbps": 3600.0,
+        "virtual_gpus": []
+      },
+      "warnings": []
+    },
+    {
+      "id": "layer_13_network",
+      "matrix": "../traffic-gen/out/mmlu_english_partial/layer_13_network.txt",
+      "metadata": {
+        "scenario_id": "layer_13_network",
+        "source": "traffic-gen",
+        "variant": "network"
+      },
+      "results": [
+        {
+          "algorithmic_bandwidth_GBps": 762.4887684715444,
+          "best_lower_bound_us": 61.9008,
+          "bottlenecks": {
+            "critical_resource": "server0->server1",
+            "stages": 2,
+            "worst_receiver_gpu": 10,
+            "worst_receiver_server": 1,
+            "worst_sender_gpu": 7,
+            "worst_sender_server": 0,
+            "worst_server_pair": "server0->server1"
+          },
+          "completion_time_ms": 0.10288497777777779,
+          "completion_time_us": 102.88497777777779,
+          "engine": "stage",
+          "lower_bounds_us": {
+            "cluster_scaleout": 47.6416,
+            "local_gpu_scaleup": 27.28391111111111,
+            "local_server_scaleup": 7.111111111111111,
+            "server_recv": 61.9008,
+            "server_send": 61.9008
+          },
+          "metadata": {
+            "scenario_id": "layer_13_network",
+            "source": "traffic-gen",
+            "variant": "network"
+          },
+          "notes": [],
+          "phase_breakdown_us": {
+            "balance": 0.23893333333333333,
+            "local_intra": 27.28391111111111,
+            "redistribute_unhidden": 3.0613333333333332,
+            "scale_out": 71.9008,
+            "scheduling": 0.4
+          },
+          "policy": "fast",
+          "slowdown_vs_lb": 1.662094476610606,
+          "total_bytes": 78448640.0,
+          "utilization": {},
+          "warnings": []
+        }
+      ],
+      "topology": {
+        "gpus_per_server": 8,
+        "name": "synthetic-two-tier",
+        "num_gpus": 16,
+        "num_servers": 2,
+        "original_num_gpus": 16,
+        "scaleout_gbps": 400.0,
+        "scaleup_gbps": 3600.0,
+        "virtual_gpus": []
+      },
+      "warnings": []
+    },
+    {
+      "id": "layer_15_network",
+      "matrix": "../traffic-gen/out/mmlu_english_partial/layer_15_network.txt",
+      "metadata": {
+        "scenario_id": "layer_15_network",
+        "source": "traffic-gen",
+        "variant": "network"
+      },
+      "results": [
+        {
+          "algorithmic_bandwidth_GBps": 925.9123544590061,
+          "best_lower_bound_us": 52.7616,
+          "bottlenecks": {
+            "critical_resource": "server0->server1",
+            "stages": 2,
+            "worst_receiver_gpu": 12,
+            "worst_receiver_server": 1,
+            "worst_sender_gpu": 9,
+            "worst_sender_server": 0,
+            "worst_server_pair": "server0->server1"
+          },
+          "completion_time_ms": 0.08364195555555556,
+          "completion_time_us": 83.64195555555557,
+          "engine": "stage",
+          "lower_bounds_us": {
+            "cluster_scaleout": 50.6752,
+            "local_gpu_scaleup": 17.97688888888889,
+            "local_server_scaleup": 5.464177777777778,
+            "server_recv": 52.7616,
+            "server_send": 52.7616
+          },
+          "metadata": {
+            "scenario_id": "layer_15_network",
+            "source": "traffic-gen",
+            "variant": "network"
+          },
+          "notes": [],
+          "phase_breakdown_us": {
+            "balance": 0.21333333333333335,
+            "local_intra": 17.97688888888889,
+            "redistribute_unhidden": 2.2901333333333334,
+            "scale_out": 62.7616,
+            "scheduling": 0.4
+          },
+          "policy": "fast",
+          "slowdown_vs_lb": 1.5852808776753466,
+          "total_bytes": 77445120.0,
+          "utilization": {},
+          "warnings": []
+        }
+      ],
+      "topology": {
+        "gpus_per_server": 8,
+        "name": "synthetic-two-tier",
+        "num_gpus": 16,
+        "num_servers": 2,
+        "original_num_gpus": 16,
+        "scaleout_gbps": 400.0,
+        "scaleup_gbps": 3600.0,
+        "virtual_gpus": []
+      },
+      "warnings": []
+    },
+    {
+      "id": "layer_17_network",
+      "matrix": "../traffic-gen/out/mmlu_english_partial/layer_17_network.txt",
+      "metadata": {
+        "scenario_id": "layer_17_network",
+        "source": "traffic-gen",
+        "variant": "network"
+      },
+      "results": [
+        {
+          "algorithmic_bandwidth_GBps": 880.2910574004123,
+          "best_lower_bound_us": 68.0192,
+          "bottlenecks": {
+            "critical_resource": "server1->server0",
+            "stages": 2,
+            "worst_receiver_gpu": 4,
+            "worst_receiver_server": 0,
+            "worst_sender_gpu": 4,
+            "worst_sender_server": 1,
+            "worst_server_pair": "server1->server0"
+          },
+          "completion_time_ms": 0.09205973333333334,
+          "completion_time_us": 92.05973333333334,
+          "engine": "stage",
+          "lower_bounds_us": {
+            "cluster_scaleout": 67.7376,
+            "local_gpu_scaleup": 9.4208,
+            "local_server_scaleup": 3.9139555555555554,
+            "server_recv": 68.0192,
+            "server_send": 68.0192
+          },
+          "metadata": {
+            "scenario_id": "layer_17_network",
+            "source": "traffic-gen",
+            "variant": "network"
+          },
+          "notes": [],
+          "phase_breakdown_us": {
+            "balance": 0.7075555555555556,
+            "local_intra": 9.4208,
+            "redistribute_unhidden": 3.5121777777777776,
+            "scale_out": 78.0192,
+            "scheduling": 0.4
+          },
+          "policy": "fast",
+          "slowdown_vs_lb": 1.3534374607953834,
+          "total_bytes": 81039360.0,
+          "utilization": {},
+          "warnings": []
+        }
+      ],
+      "topology": {
+        "gpus_per_server": 8,
+        "name": "synthetic-two-tier",
+        "num_gpus": 16,
+        "num_servers": 2,
+        "original_num_gpus": 16,
+        "scaleout_gbps": 400.0,
+        "scaleup_gbps": 3600.0,
+        "virtual_gpus": []
+      },
+      "warnings": []
+    },
+    {
+      "id": "layer_19_network",
+      "matrix": "../traffic-gen/out/mmlu_english_partial/layer_19_network.txt",
+      "metadata": {
+        "scenario_id": "layer_19_network",
+        "source": "traffic-gen",
+        "variant": "network"
+      },
+      "results": [
+        {
+          "algorithmic_bandwidth_GBps": 791.8743383594174,
+          "best_lower_bound_us": 63.232,
+          "bottlenecks": {
+            "critical_resource": "server0->server1",
+            "stages": 2,
+            "worst_receiver_gpu": 11,
+            "worst_receiver_server": 1,
+            "worst_sender_gpu": 12,
+            "worst_sender_server": 0,
+            "worst_server_pair": "server0->server1"
+          },
+          "completion_time_ms": 0.0994161777777778,
+          "completion_time_us": 99.41617777777779,
+          "engine": "stage",
+          "lower_bounds_us": {
+            "cluster_scaleout": 60.3776,
+            "local_gpu_scaleup": 22.664533333333335,
+            "local_server_scaleup": 4.741688888888889,
+            "server_recv": 63.232,
+            "server_send": 63.232
+          },
+          "metadata": {
+            "scenario_id": "layer_19_network",
+            "source": "traffic-gen",
+            "variant": "network"
+          },
+          "notes": [],
+          "phase_breakdown_us": {
+            "balance": 0.3818666666666667,
+            "local_intra": 22.664533333333335,
+            "redistribute_unhidden": 2.7377777777777776,
+            "scale_out": 73.232,
+            "scheduling": 0.4
+          },
+          "policy": "fast",
+          "slowdown_vs_lb": 1.5722447143499778,
+          "total_bytes": 78725120.0,
+          "utilization": {},
+          "warnings": []
+        }
+      ],
+      "topology": {
+        "gpus_per_server": 8,
+        "name": "synthetic-two-tier",
+        "num_gpus": 16,
+        "num_servers": 2,
+        "original_num_gpus": 16,
+        "scaleout_gbps": 400.0,
+        "scaleup_gbps": 3600.0,
+        "virtual_gpus": []
+      },
+      "warnings": []
+    },
+    {
+      "id": "layer_21_network",
+      "matrix": "../traffic-gen/out/mmlu_english_partial/layer_21_network.txt",
+      "metadata": {
+        "scenario_id": "layer_21_network",
+        "source": "traffic-gen",
+        "variant": "network"
+      },
+      "results": [
+        {
+          "algorithmic_bandwidth_GBps": 923.7585713209253,
+          "best_lower_bound_us": 54.7072,
+          "bottlenecks": {
+            "critical_resource": "server0->server1",
+            "stages": 2,
+            "worst_receiver_gpu": 15,
+            "worst_receiver_server": 1,
+            "worst_sender_gpu": 3,
+            "worst_sender_server": 0,
+            "worst_server_pair": "server0->server1"
+          },
+          "completion_time_ms": 0.08493440000000001,
+          "completion_time_us": 84.93440000000001,
+          "engine": "stage",
+          "lower_bounds_us": {
+            "cluster_scaleout": 50.9696,
+            "local_gpu_scaleup": 17.134933333333333,
+            "local_server_scaleup": 5.649066666666666,
+            "server_recv": 54.7072,
+            "server_send": 54.7072
+          },
+          "metadata": {
+            "scenario_id": "layer_21_network",
+            "source": "traffic-gen",
+            "variant": "network"
+          },
+          "notes": [],
+          "phase_breakdown_us": {
+            "balance": 0.2016,
+            "local_intra": 17.134933333333333,
+            "redistribute_unhidden": 2.490666666666667,
+            "scale_out": 64.7072,
+            "scheduling": 0.4
+          },
+          "policy": "fast",
+          "slowdown_vs_lb": 1.5525269068788023,
+          "total_bytes": 78458880.0,
+          "utilization": {},
+          "warnings": []
+        }
+      ],
+      "topology": {
+        "gpus_per_server": 8,
+        "name": "synthetic-two-tier",
+        "num_gpus": 16,
+        "num_servers": 2,
+        "original_num_gpus": 16,
+        "scaleout_gbps": 400.0,
+        "scaleup_gbps": 3600.0,
+        "virtual_gpus": []
+      },
+      "warnings": []
+    },
+    {
+      "id": "layer_23_network",
+      "matrix": "../traffic-gen/out/mmlu_english_partial/layer_23_network.txt",
+      "metadata": {
+        "scenario_id": "layer_23_network",
+        "source": "traffic-gen",
+        "variant": "network"
+      },
+      "results": [
+        {
+          "algorithmic_bandwidth_GBps": 824.5267453008985,
+          "best_lower_bound_us": 64.4096,
+          "bottlenecks": {
+            "critical_resource": "server0->server1",
+            "stages": 2,
+            "worst_receiver_gpu": 12,
+            "worst_receiver_server": 1,
+            "worst_sender_gpu": 3,
+            "worst_sender_server": 0,
+            "worst_server_pair": "server0->server1"
+          },
+          "completion_time_ms": 0.0956778666666667,
+          "completion_time_us": 95.67786666666669,
+          "engine": "stage",
+          "lower_bounds_us": {
+            "cluster_scaleout": 53.2864,
+            "local_gpu_scaleup": 16.702577777777776,
+            "local_server_scaleup": 6.084266666666666,
+            "server_recv": 64.4096,
+            "server_send": 64.4096
+          },
+          "metadata": {
+            "scenario_id": "layer_23_network",
+            "source": "traffic-gen",
+            "variant": "network"
+          },
+          "notes": [],
+          "phase_breakdown_us": {
+            "balance": 0.32853333333333334,
+            "local_intra": 16.702577777777776,
+            "redistribute_unhidden": 3.8371555555555554,
+            "scale_out": 74.40960000000001,
+            "scheduling": 0.4
+          },
+          "policy": "fast",
+          "slowdown_vs_lb": 1.4854597244303132,
+          "total_bytes": 78888960.0,
+          "utilization": {},
+          "warnings": []
+        }
+      ],
+      "topology": {
+        "gpus_per_server": 8,
+        "name": "synthetic-two-tier",
+        "num_gpus": 16,
+        "num_servers": 2,
+        "original_num_gpus": 16,
+        "scaleout_gbps": 400.0,
+        "scaleup_gbps": 3600.0,
+        "virtual_gpus": []
+      },
+      "warnings": []
+    },
+    {
+      "id": "layer_25_network",
+      "matrix": "../traffic-gen/out/mmlu_english_partial/layer_25_network.txt",
+      "metadata": {
+        "scenario_id": "layer_25_network",
+        "source": "traffic-gen",
+        "variant": "network"
+      },
+      "results": [
+        {
+          "algorithmic_bandwidth_GBps": 960.2229332232429,
+          "best_lower_bound_us": 49.3056,
+          "bottlenecks": {
+            "critical_resource": "server1->server0",
+            "stages": 2,
+            "worst_receiver_gpu": 7,
+            "worst_receiver_server": 0,
+            "worst_sender_gpu": 1,
+            "worst_sender_server": 1,
+            "worst_server_pair": "server1->server0"
+          },
+          "completion_time_ms": 0.08267946666666667,
+          "completion_time_us": 82.67946666666667,
+          "engine": "stage",
+          "lower_bounds_us": {
+            "cluster_scaleout": 44.1728,
+            "local_gpu_scaleup": 21.185422222222222,
+            "local_server_scaleup": 6.692977777777778,
+            "server_recv": 49.3056,
+            "server_send": 49.3056
+          },
+          "metadata": {
+            "scenario_id": "layer_25_network",
+            "source": "traffic-gen",
+            "variant": "network"
+          },
+          "notes": [],
+          "phase_breakdown_us": {
+            "balance": 0.4096,
+            "local_intra": 21.185422222222222,
+            "redistribute_unhidden": 1.3788444444444445,
+            "scale_out": 59.3056,
+            "scheduling": 0.4
+          },
+          "policy": "fast",
+          "slowdown_vs_lb": 1.6768778123918313,
+          "total_bytes": 79390720.0,
+          "utilization": {},
+          "warnings": []
+        }
+      ],
+      "topology": {
+        "gpus_per_server": 8,
+        "name": "synthetic-two-tier",
+        "num_gpus": 16,
+        "num_servers": 2,
+        "original_num_gpus": 16,
+        "scaleout_gbps": 400.0,
+        "scaleup_gbps": 3600.0,
+        "virtual_gpus": []
+      },
+      "warnings": []
+    },
+    {
+      "id": "layer_27_network",
+      "matrix": "../traffic-gen/out/mmlu_english_partial/layer_27_network.txt",
+      "metadata": {
+        "scenario_id": "layer_27_network",
+        "source": "traffic-gen",
+        "variant": "network"
+      },
+      "results": [
+        {
+          "algorithmic_bandwidth_GBps": 712.478976163319,
+          "best_lower_bound_us": 76.16,
+          "bottlenecks": {
+            "critical_resource": "server1->server0",
+            "stages": 2,
+            "worst_receiver_gpu": 2,
+            "worst_receiver_server": 0,
+            "worst_sender_gpu": 12,
+            "worst_sender_server": 1,
+            "worst_server_pair": "server1->server0"
+          },
+          "completion_time_ms": 0.11035093333333333,
+          "completion_time_us": 110.35093333333333,
+          "engine": "stage",
+          "lower_bounds_us": {
+            "cluster_scaleout": 53.9648,
+            "local_gpu_scaleup": 20.957866666666668,
+            "local_server_scaleup": 7.000177777777778,
+            "server_recv": 76.16,
+            "server_send": 76.16
+          },
+          "metadata": {
+            "scenario_id": "layer_27_network",
+            "source": "traffic-gen",
+            "variant": "network"
+          },
+          "notes": [],
+          "phase_breakdown_us": {
+            "balance": 0.22044444444444444,
+            "local_intra": 20.957866666666668,
+            "redistribute_unhidden": 2.6126222222222224,
+            "scale_out": 86.16,
+            "scheduling": 0.4
+          },
+          "policy": "fast",
+          "slowdown_vs_lb": 1.4489355742296919,
+          "total_bytes": 78622720.0,
+          "utilization": {},
+          "warnings": []
+        }
+      ],
+      "topology": {
+        "gpus_per_server": 8,
+        "name": "synthetic-two-tier",
+        "num_gpus": 16,
+        "num_servers": 2,
+        "original_num_gpus": 16,
+        "scaleout_gbps": 400.0,
+        "scaleup_gbps": 3600.0,
+        "virtual_gpus": []
+      },
+      "warnings": []
+    },
+    {
+      "id": "layer_29_network",
+      "matrix": "../traffic-gen/out/mmlu_english_partial/layer_29_network.txt",
+      "metadata": {
+        "scenario_id": "layer_29_network",
+        "source": "traffic-gen",
+        "variant": "network"
+      },
+      "results": [
+        {
+          "algorithmic_bandwidth_GBps": 892.2807031470154,
+          "best_lower_bound_us": 64.9472,
+          "bottlenecks": {
+            "critical_resource": "server0->server1",
+            "stages": 2,
+            "worst_receiver_gpu": 12,
+            "worst_receiver_server": 1,
+            "worst_sender_gpu": 5,
+            "worst_sender_server": 0,
+            "worst_server_pair": "server0->server1"
+          },
+          "completion_time_ms": 0.0895832888888889,
+          "completion_time_us": 89.5832888888889,
+          "engine": "stage",
+          "lower_bounds_us": {
+            "cluster_scaleout": 59.5584,
+            "local_gpu_scaleup": 11.195733333333333,
+            "local_server_scaleup": 5.117155555555556,
+            "server_recv": 64.9472,
+            "server_send": 64.9472
+          },
+          "metadata": {
+            "scenario_id": "layer_29_network",
+            "source": "traffic-gen",
+            "variant": "network"
+          },
+          "notes": [],
+          "phase_breakdown_us": {
+            "balance": 0.35342222222222225,
+            "local_intra": 11.195733333333333,
+            "redistribute_unhidden": 2.686933333333333,
+            "scale_out": 74.94720000000001,
+            "scheduling": 0.4
+          },
+          "policy": "fast",
+          "slowdown_vs_lb": 1.3793248806551923,
+          "total_bytes": 79933440.0,
+          "utilization": {},
+          "warnings": []
+        }
+      ],
+      "topology": {
+        "gpus_per_server": 8,
+        "name": "synthetic-two-tier",
+        "num_gpus": 16,
+        "num_servers": 2,
+        "original_num_gpus": 16,
+        "scaleout_gbps": 400.0,
+        "scaleup_gbps": 3600.0,
+        "virtual_gpus": []
+      },
+      "warnings": []
+    },
+    {
+      "id": "layer_3_network",
+      "matrix": "../traffic-gen/out/mmlu_english_partial/layer_3_network.txt",
+      "metadata": {
+        "scenario_id": "layer_3_network",
+        "source": "traffic-gen",
+        "variant": "network"
+      },
+      "results": [
+        {
+          "algorithmic_bandwidth_GBps": 802.5343127426497,
+          "best_lower_bound_us": 47.9488,
+          "bottlenecks": {
+            "critical_resource": "server1->server0",
+            "stages": 2,
+            "worst_receiver_gpu": 3,
+            "worst_receiver_server": 0,
+            "worst_sender_gpu": 4,
+            "worst_sender_server": 1,
+            "worst_server_pair": "server1->server0"
+          },
+          "completion_time_ms": 0.09753422222222224,
+          "completion_time_us": 97.53422222222224,
+          "engine": "stage",
+          "lower_bounds_us": {
+            "cluster_scaleout": 45.4144,
+            "local_gpu_scaleup": 36.49991111111111,
+            "local_server_scaleup": 6.047288888888889,
+            "server_recv": 47.9488,
+            "server_send": 47.9488
+          },
+          "metadata": {
+            "scenario_id": "layer_3_network",
+            "source": "traffic-gen",
+            "variant": "network"
+          },
+          "notes": [],
+          "phase_breakdown_us": {
+            "balance": 0.43377777777777776,
+            "local_intra": 36.49991111111111,
+            "redistribute_unhidden": 2.251733333333333,
+            "scale_out": 57.948800000000006,
+            "scheduling": 0.4
+          },
+          "policy": "fast",
+          "slowdown_vs_lb": 2.0341327045144455,
+          "total_bytes": 78274560.0,
+          "utilization": {},
+          "warnings": []
+        }
+      ],
+      "topology": {
+        "gpus_per_server": 8,
+        "name": "synthetic-two-tier",
+        "num_gpus": 16,
+        "num_servers": 2,
+        "original_num_gpus": 16,
+        "scaleout_gbps": 400.0,
+        "scaleup_gbps": 3600.0,
+        "virtual_gpus": []
+      },
+      "warnings": []
+    },
+    {
+      "id": "layer_31_network",
+      "matrix": "../traffic-gen/out/mmlu_english_partial/layer_31_network.txt",
+      "metadata": {
+        "scenario_id": "layer_31_network",
+        "source": "traffic-gen",
+        "variant": "network"
+      },
+      "results": [
+        {
+          "algorithmic_bandwidth_GBps": 757.8092734461445,
+          "best_lower_bound_us": 48.150755555555556,
+          "bottlenecks": {
+            "critical_resource": "server0->server1",
+            "stages": 2,
+            "worst_receiver_gpu": 14,
+            "worst_receiver_server": 1,
+            "worst_sender_gpu": 11,
+            "worst_sender_server": 0,
+            "worst_server_pair": "server0->server1"
+          },
+          "completion_time_ms": 0.10089884444444445,
+          "completion_time_us": 100.89884444444445,
+          "engine": "stage",
+          "lower_bounds_us": {
+            "cluster_scaleout": 31.7696,
+            "local_gpu_scaleup": 48.150755555555556,
+            "local_server_scaleup": 7.9616,
+            "server_recv": 38.7584,
+            "server_send": 38.7584
+          },
+          "metadata": {
+            "scenario_id": "layer_31_network",
+            "source": "traffic-gen",
+            "variant": "network"
+          },
+          "notes": [],
+          "phase_breakdown_us": {
+            "balance": 1.1164444444444444,
+            "local_intra": 48.150755555555556,
+            "redistribute_unhidden": 2.4732444444444446,
+            "scale_out": 48.7584,
+            "scheduling": 0.4
+          },
+          "policy": "fast",
+          "slowdown_vs_lb": 2.095477906427221,
+          "total_bytes": 76462080.0,
+          "utilization": {},
+          "warnings": []
+        }
+      ],
+      "topology": {
+        "gpus_per_server": 8,
+        "name": "synthetic-two-tier",
+        "num_gpus": 16,
+        "num_servers": 2,
+        "original_num_gpus": 16,
+        "scaleout_gbps": 400.0,
+        "scaleup_gbps": 3600.0,
+        "virtual_gpus": []
+      },
+      "warnings": []
+    },
+    {
+      "id": "layer_33_network",
+      "matrix": "../traffic-gen/out/mmlu_english_partial/layer_33_network.txt",
+      "metadata": {
+        "scenario_id": "layer_33_network",
+        "source": "traffic-gen",
+        "variant": "network"
+      },
+      "results": [
+        {
+          "algorithmic_bandwidth_GBps": 909.2269944732211,
+          "best_lower_bound_us": 54.1184,
+          "bottlenecks": {
+            "critical_resource": "server0->server1",
+            "stages": 2,
+            "worst_receiver_gpu": 11,
+            "worst_receiver_server": 1,
+            "worst_sender_gpu": 3,
+            "worst_sender_server": 0,
+            "worst_server_pair": "server0->server1"
+          },
+          "completion_time_ms": 0.08607786666666667,
+          "completion_time_us": 86.07786666666667,
+          "engine": "stage",
+          "lower_bounds_us": {
+            "cluster_scaleout": 51.584,
+            "local_gpu_scaleup": 19.569777777777777,
+            "local_server_scaleup": 5.242311111111111,
+            "server_recv": 54.1184,
+            "server_send": 54.1184
+          },
+          "metadata": {
+            "scenario_id": "layer_33_network",
+            "source": "traffic-gen",
+            "variant": "network"
+          },
+          "notes": [],
+          "phase_breakdown_us": {
+            "balance": 0.3000888888888889,
+            "local_intra": 19.569777777777777,
+            "redistribute_unhidden": 1.6896,
+            "scale_out": 64.1184,
+            "scheduling": 0.4
+          },
+          "policy": "fast",
+          "slowdown_vs_lb": 1.5905471460107221,
+          "total_bytes": 78264320.0,
+          "utilization": {},
+          "warnings": []
+        }
+      ],
+      "topology": {
+        "gpus_per_server": 8,
+        "name": "synthetic-two-tier",
+        "num_gpus": 16,
+        "num_servers": 2,
+        "original_num_gpus": 16,
+        "scaleout_gbps": 400.0,
+        "scaleup_gbps": 3600.0,
+        "virtual_gpus": []
+      },
+      "warnings": []
+    },
+    {
+      "id": "layer_35_network",
+      "matrix": "../traffic-gen/out/mmlu_english_partial/layer_35_network.txt",
+      "metadata": {
+        "scenario_id": "layer_35_network",
+        "source": "traffic-gen",
+        "variant": "network"
+      },
+      "results": [
+        {
+          "algorithmic_bandwidth_GBps": 985.1072961373391,
+          "best_lower_bound_us": 50.432,
+          "bottlenecks": {
+            "critical_resource": "server0->server1",
+            "stages": 2,
+            "worst_receiver_gpu": 14,
+            "worst_receiver_server": 1,
+            "worst_sender_gpu": 3,
+            "worst_sender_server": 0,
+            "worst_server_pair": "server0->server1"
+          },
+          "completion_time_ms": 0.07953066666666667,
+          "completion_time_us": 79.53066666666666,
+          "engine": "stage",
+          "lower_bounds_us": {
+            "cluster_scaleout": 45.2608,
+            "local_gpu_scaleup": 16.247466666666668,
+            "local_server_scaleup": 6.417066666666667,
+            "server_recv": 50.432,
+            "server_send": 50.432
+          },
+          "metadata": {
+            "scenario_id": "layer_35_network",
+            "source": "traffic-gen",
+            "variant": "network"
+          },
+          "notes": [],
+          "phase_breakdown_us": {
+            "balance": 0.4992,
+            "local_intra": 16.247466666666668,
+            "redistribute_unhidden": 1.952,
+            "scale_out": 60.431999999999995,
+            "scheduling": 0.4
+          },
+          "policy": "fast",
+          "slowdown_vs_lb": 1.5769881556683585,
+          "total_bytes": 78346240.0,
+          "utilization": {},
+          "warnings": []
+        }
+      ],
+      "topology": {
+        "gpus_per_server": 8,
+        "name": "synthetic-two-tier",
+        "num_gpus": 16,
+        "num_servers": 2,
+        "original_num_gpus": 16,
+        "scaleout_gbps": 400.0,
+        "scaleup_gbps": 3600.0,
+        "virtual_gpus": []
+      },
+      "warnings": []
+    },
+    {
+      "id": "layer_37_network",
+      "matrix": "../traffic-gen/out/mmlu_english_partial/layer_37_network.txt",
+      "metadata": {
+        "scenario_id": "layer_37_network",
+        "source": "traffic-gen",
+        "variant": "network"
+      },
+      "results": [
+        {
+          "algorithmic_bandwidth_GBps": 649.4766619519096,
+          "best_lower_bound_us": 82.8928,
+          "bottlenecks": {
+            "critical_resource": "server0->server1",
+            "stages": 2,
+            "worst_receiver_gpu": 14,
+            "worst_receiver_server": 1,
+            "worst_sender_gpu": 1,
+            "worst_sender_server": 0,
+            "worst_server_pair": "server0->server1"
+          },
+          "completion_time_ms": 0.12066133333333331,
+          "completion_time_us": 120.66133333333332,
+          "engine": "stage",
+          "lower_bounds_us": {
+            "cluster_scaleout": 57.3824,
+            "local_gpu_scaleup": 24.348444444444443,
+            "local_server_scaleup": 7.028622222222222,
+            "server_recv": 82.8928,
+            "server_send": 82.8928
+          },
+          "metadata": {
+            "scenario_id": "layer_37_network",
+            "source": "traffic-gen",
+            "variant": "network"
+          },
+          "notes": [],
+          "phase_breakdown_us": {
+            "balance": 0.26595555555555556,
+            "local_intra": 24.348444444444443,
+            "redistribute_unhidden": 2.7541333333333333,
+            "scale_out": 92.8928,
+            "scheduling": 0.4
+          },
+          "policy": "fast",
+          "slowdown_vs_lb": 1.4556310479719992,
+          "total_bytes": 78366720.0,
+          "utilization": {},
+          "warnings": []
+        }
+      ],
+      "topology": {
+        "gpus_per_server": 8,
+        "name": "synthetic-two-tier",
+        "num_gpus": 16,
+        "num_servers": 2,
+        "original_num_gpus": 16,
+        "scaleout_gbps": 400.0,
+        "scaleup_gbps": 3600.0,
+        "virtual_gpus": []
+      },
+      "warnings": []
+    },
+    {
+      "id": "layer_39_network",
+      "matrix": "../traffic-gen/out/mmlu_english_partial/layer_39_network.txt",
+      "metadata": {
+        "scenario_id": "layer_39_network",
+        "source": "traffic-gen",
+        "variant": "network"
+      },
+      "results": [
+        {
+          "algorithmic_bandwidth_GBps": 819.8710194509794,
+          "best_lower_bound_us": 54.1952,
+          "bottlenecks": {
+            "critical_resource": "server1->server0",
+            "stages": 2,
+            "worst_receiver_gpu": 0,
+            "worst_receiver_server": 0,
+            "worst_sender_gpu": 7,
+            "worst_sender_server": 1,
+            "worst_server_pair": "server1->server0"
+          },
+          "completion_time_ms": 0.0958215111111111,
+          "completion_time_us": 95.8215111111111,
+          "engine": "stage",
+          "lower_bounds_us": {
+            "cluster_scaleout": 40.3456,
+            "local_gpu_scaleup": 28.0576,
+            "local_server_scaleup": 7.879111111111111,
+            "server_recv": 54.1952,
+            "server_send": 54.1952
+          },
+          "metadata": {
+            "scenario_id": "layer_39_network",
+            "source": "traffic-gen",
+            "variant": "network"
+          },
+          "notes": [],
+          "phase_breakdown_us": {
+            "balance": 0.45582222222222224,
+            "local_intra": 28.0576,
+            "redistribute_unhidden": 2.7128888888888887,
+            "scale_out": 64.1952,
+            "scheduling": 0.4
+          },
+          "policy": "fast",
+          "slowdown_vs_lb": 1.768081142077363,
+          "total_bytes": 78561280.0,
+          "utilization": {},
+          "warnings": []
+        }
+      ],
+      "topology": {
+        "gpus_per_server": 8,
+        "name": "synthetic-two-tier",
+        "num_gpus": 16,
+        "num_servers": 2,
+        "original_num_gpus": 16,
+        "scaleout_gbps": 400.0,
+        "scaleup_gbps": 3600.0,
+        "virtual_gpus": []
+      },
+      "warnings": []
+    },
+    {
+      "id": "layer_41_network",
+      "matrix": "../traffic-gen/out/mmlu_english_partial/layer_41_network.txt",
+      "metadata": {
+        "scenario_id": "layer_41_network",
+        "source": "traffic-gen",
+        "variant": "network"
+      },
+      "results": [
+        {
+          "algorithmic_bandwidth_GBps": 772.9782691653173,
+          "best_lower_bound_us": 74.4704,
+          "bottlenecks": {
+            "critical_resource": "server0->server1",
+            "stages": 2,
+            "worst_receiver_gpu": 2,
+            "worst_receiver_server": 1,
+            "worst_sender_gpu": 8,
+            "worst_sender_server": 0,
+            "worst_server_pair": "server0->server1"
+          },
+          "completion_time_ms": 0.10342293333333333,
+          "completion_time_us": 103.42293333333333,
+          "engine": "stage",
+          "lower_bounds_us": {
+            "cluster_scaleout": 65.4976,
+            "local_gpu_scaleup": 14.7456,
+            "local_server_scaleup": 4.571022222222222,
+            "server_recv": 74.4704,
+            "server_send": 74.4704
+          },
+          "metadata": {
+            "scenario_id": "layer_41_network",
+            "source": "traffic-gen",
+            "variant": "network"
+          },
+          "notes": [],
+          "phase_breakdown_us": {
+            "balance": 0.8483555555555555,
+            "local_intra": 14.7456,
+            "redistribute_unhidden": 2.9585777777777778,
+            "scale_out": 84.4704,
+            "scheduling": 0.4
+          },
+          "policy": "fast",
+          "slowdown_vs_lb": 1.3887790764294718,
+          "total_bytes": 79943680.0,
+          "utilization": {},
+          "warnings": []
+        }
+      ],
+      "topology": {
+        "gpus_per_server": 8,
+        "name": "synthetic-two-tier",
+        "num_gpus": 16,
+        "num_servers": 2,
+        "original_num_gpus": 16,
+        "scaleout_gbps": 400.0,
+        "scaleup_gbps": 3600.0,
+        "virtual_gpus": []
+      },
+      "warnings": []
+    },
+    {
+      "id": "layer_43_network",
+      "matrix": "../traffic-gen/out/mmlu_english_partial/layer_43_network.txt",
+      "metadata": {
+        "scenario_id": "layer_43_network",
+        "source": "traffic-gen",
+        "variant": "network"
+      },
+      "results": [
+        {
+          "algorithmic_bandwidth_GBps": 610.5305760805954,
+          "best_lower_bound_us": 84.3776,
+          "bottlenecks": {
+            "critical_resource": "server1->server0",
+            "stages": 2,
+            "worst_receiver_gpu": 0,
+            "worst_receiver_server": 0,
+            "worst_sender_gpu": 11,
+            "worst_sender_server": 1,
+            "worst_server_pair": "server1->server0"
+          },
+          "completion_time_ms": 0.13001884444444445,
+          "completion_time_us": 130.01884444444445,
+          "engine": "stage",
+          "lower_bounds_us": {
+            "cluster_scaleout": 59.008,
+            "local_gpu_scaleup": 31.69848888888889,
+            "local_server_scaleup": 7.031466666666667,
+            "server_recv": 84.3776,
+            "server_send": 84.3776
+          },
+          "metadata": {
+            "scenario_id": "layer_43_network",
+            "source": "traffic-gen",
+            "variant": "network"
+          },
+          "notes": [],
+          "phase_breakdown_us": {
+            "balance": 0.3456,
+            "local_intra": 31.69848888888889,
+            "redistribute_unhidden": 3.1971555555555558,
+            "scale_out": 94.3776,
+            "scheduling": 0.4
+          },
+          "policy": "fast",
+          "slowdown_vs_lb": 1.5409165992448761,
+          "total_bytes": 79380480.0,
+          "utilization": {},
+          "warnings": []
+        }
+      ],
+      "topology": {
+        "gpus_per_server": 8,
+        "name": "synthetic-two-tier",
+        "num_gpus": 16,
+        "num_servers": 2,
+        "original_num_gpus": 16,
+        "scaleout_gbps": 400.0,
+        "scaleup_gbps": 3600.0,
+        "virtual_gpus": []
+      },
+      "warnings": []
+    },
+    {
+      "id": "layer_45_network",
+      "matrix": "../traffic-gen/out/mmlu_english_partial/layer_45_network.txt",
+      "metadata": {
+        "scenario_id": "layer_45_network",
+        "source": "traffic-gen",
+        "variant": "network"
+      },
+      "results": [
+        {
+          "algorithmic_bandwidth_GBps": 389.937652365667,
+          "best_lower_bound_us": 104.8064,
+          "bottlenecks": {
+            "critical_resource": "server1->server0",
+            "stages": 1,
+            "worst_receiver_gpu": 5,
+            "worst_receiver_server": 0,
+            "worst_sender_gpu": 0,
+            "worst_sender_server": 1,
+            "worst_server_pair": "server1->server0"
+          },
+          "completion_time_ms": 0.20170773333333333,
+          "completion_time_us": 201.70773333333332,
+          "engine": "stage",
+          "lower_bounds_us": {
+            "cluster_scaleout": 52.4032,
+            "local_gpu_scaleup": 81.5104,
+            "local_server_scaleup": 10.197333333333333,
+            "server_recv": 104.8064,
+            "server_send": 104.8064
+          },
+          "metadata": {
+            "scenario_id": "layer_45_network",
+            "source": "traffic-gen",
+            "variant": "network"
+          },
+          "notes": [],
+          "phase_breakdown_us": {
+            "balance": 0.004266666666666667,
+            "local_intra": 81.5104,
+            "redistribute_unhidden": 10.186666666666667,
+            "scale_out": 109.8064,
+            "scheduling": 0.2
+          },
+          "policy": "fast",
+          "slowdown_vs_lb": 1.9245745806871846,
+          "total_bytes": 78653440.0,
+          "utilization": {},
+          "warnings": []
+        }
+      ],
+      "topology": {
+        "gpus_per_server": 8,
+        "name": "synthetic-two-tier",
+        "num_gpus": 16,
+        "num_servers": 2,
+        "original_num_gpus": 16,
+        "scaleout_gbps": 400.0,
+        "scaleup_gbps": 3600.0,
+        "virtual_gpus": []
+      },
+      "warnings": []
+    },
+    {
+      "id": "layer_47_network",
+      "matrix": "../traffic-gen/out/mmlu_english_partial/layer_47_network.txt",
+      "metadata": {
+        "scenario_id": "layer_47_network",
+        "source": "traffic-gen",
+        "variant": "network"
+      },
+      "results": [
+        {
+          "algorithmic_bandwidth_GBps": 940.8818193325177,
+          "best_lower_bound_us": 62.8736,
+          "bottlenecks": {
+            "critical_resource": "server0->server1",
+            "stages": 2,
+            "worst_receiver_gpu": 13,
+            "worst_receiver_server": 1,
+            "worst_sender_gpu": 3,
+            "worst_sender_server": 0,
+            "worst_server_pair": "server0->server1"
+          },
+          "completion_time_ms": 0.08427022222222222,
+          "completion_time_us": 84.27022222222222,
+          "engine": "stage",
+          "lower_bounds_us": {
+            "cluster_scaleout": 54.2208,
+            "local_gpu_scaleup": 9.216,
+            "local_server_scaleup": 5.859555555555556,
+            "server_recv": 62.8736,
+            "server_send": 62.8736
+          },
+          "metadata": {
+            "scenario_id": "layer_47_network",
+            "source": "traffic-gen",
+            "variant": "network"
+          },
+          "notes": [],
+          "phase_breakdown_us": {
+            "balance": 0.2531555555555556,
+            "local_intra": 9.216,
+            "redistribute_unhidden": 1.5274666666666668,
+            "scale_out": 72.8736,
+            "scheduling": 0.4
+          },
+          "policy": "fast",
+          "slowdown_vs_lb": 1.3403117082880924,
+          "total_bytes": 79288320.0,
+          "utilization": {},
+          "warnings": []
+        }
+      ],
+      "topology": {
+        "gpus_per_server": 8,
+        "name": "synthetic-two-tier",
+        "num_gpus": 16,
+        "num_servers": 2,
+        "original_num_gpus": 16,
+        "scaleout_gbps": 400.0,
+        "scaleup_gbps": 3600.0,
+        "virtual_gpus": []
+      },
+      "warnings": []
+    },
+    {
+      "id": "layer_5_network",
+      "matrix": "../traffic-gen/out/mmlu_english_partial/layer_5_network.txt",
+      "metadata": {
+        "scenario_id": "layer_5_network",
+        "source": "traffic-gen",
+        "variant": "network"
+      },
+      "results": [
+        {
+          "algorithmic_bandwidth_GBps": 789.4752485757756,
+          "best_lower_bound_us": 66.048,
+          "bottlenecks": {
+            "critical_resource": "server1->server0",
+            "stages": 2,
+            "worst_receiver_gpu": 13,
+            "worst_receiver_server": 0,
+            "worst_sender_gpu": 5,
+            "worst_sender_server": 1,
+            "worst_server_pair": "server1->server0"
+          },
+          "completion_time_ms": 0.10048355555555556,
+          "completion_time_us": 100.48355555555557,
+          "engine": "stage",
+          "lower_bounds_us": {
+            "cluster_scaleout": 58.0608,
+            "local_gpu_scaleup": 20.82133333333333,
+            "local_server_scaleup": 5.376,
+            "server_recv": 66.048,
+            "server_send": 66.048
+          },
+          "metadata": {
+            "scenario_id": "layer_5_network",
+            "source": "traffic-gen",
+            "variant": "network"
+          },
+          "notes": [],
+          "phase_breakdown_us": {
+            "balance": 0.32426666666666665,
+            "local_intra": 20.82133333333333,
+            "redistribute_unhidden": 2.8899555555555554,
+            "scale_out": 76.048,
+            "scheduling": 0.4
+          },
+          "policy": "fast",
+          "slowdown_vs_lb": 1.5213716623600346,
+          "total_bytes": 79329280.0,
+          "utilization": {},
+          "warnings": []
+        }
+      ],
+      "topology": {
+        "gpus_per_server": 8,
+        "name": "synthetic-two-tier",
+        "num_gpus": 16,
+        "num_servers": 2,
+        "original_num_gpus": 16,
+        "scaleout_gbps": 400.0,
+        "scaleup_gbps": 3600.0,
+        "virtual_gpus": []
+      },
+      "warnings": []
+    },
+    {
+      "id": "layer_7_network",
+      "matrix": "../traffic-gen/out/mmlu_english_partial/layer_7_network.txt",
+      "metadata": {
+        "scenario_id": "layer_7_network",
+        "source": "traffic-gen",
+        "variant": "network"
+      },
+      "results": [
+        {
+          "algorithmic_bandwidth_GBps": 902.358980158073,
+          "best_lower_bound_us": 62.1824,
+          "bottlenecks": {
+            "critical_resource": "server0->server1",
+            "stages": 2,
+            "worst_receiver_gpu": 7,
+            "worst_receiver_server": 1,
+            "worst_sender_gpu": 5,
+            "worst_sender_server": 0,
+            "worst_server_pair": "server0->server1"
+          },
+          "completion_time_ms": 0.08803804444444445,
+          "completion_time_us": 88.03804444444445,
+          "engine": "stage",
+          "lower_bounds_us": {
+            "cluster_scaleout": 54.912,
+            "local_gpu_scaleup": 12.629333333333333,
+            "local_server_scaleup": 5.6064,
+            "server_recv": 62.1824,
+            "server_send": 62.1824
+          },
+          "metadata": {
+            "scenario_id": "layer_7_network",
+            "source": "traffic-gen",
+            "variant": "network"
+          },
+          "notes": [],
+          "phase_breakdown_us": {
+            "balance": 0.29155555555555557,
+            "local_intra": 12.629333333333333,
+            "redistribute_unhidden": 2.5347555555555554,
+            "scale_out": 72.1824,
+            "scheduling": 0.4
+          },
+          "policy": "fast",
+          "slowdown_vs_lb": 1.4158032569415855,
+          "total_bytes": 79441920.0,
+          "utilization": {},
+          "warnings": []
+        }
+      ],
+      "topology": {
+        "gpus_per_server": 8,
+        "name": "synthetic-two-tier",
+        "num_gpus": 16,
+        "num_servers": 2,
+        "original_num_gpus": 16,
+        "scaleout_gbps": 400.0,
+        "scaleup_gbps": 3600.0,
+        "virtual_gpus": []
+      },
+      "warnings": []
+    },
+    {
+      "id": "layer_9_network",
+      "matrix": "../traffic-gen/out/mmlu_english_partial/layer_9_network.txt",
+      "metadata": {
+        "scenario_id": "layer_9_network",
+        "source": "traffic-gen",
+        "variant": "network"
+      },
+      "results": [
+        {
+          "algorithmic_bandwidth_GBps": 591.6693480135951,
+          "best_lower_bound_us": 84.5056,
+          "bottlenecks": {
+            "critical_resource": "server1->server0",
+            "stages": 2,
+            "worst_receiver_gpu": 7,
+            "worst_receiver_server": 0,
+            "worst_sender_gpu": 9,
+            "worst_sender_server": 1,
+            "worst_server_pair": "server1->server0"
+          },
+          "completion_time_ms": 0.13149831111111113,
+          "completion_time_us": 131.49831111111112,
+          "engine": "stage",
+          "lower_bounds_us": {
+            "cluster_scaleout": 59.1104,
+            "local_gpu_scaleup": 30.60622222222222,
+            "local_server_scaleup": 6.482488888888889,
+            "server_recv": 84.5056,
+            "server_send": 84.5056
+          },
+          "metadata": {
+            "scenario_id": "layer_9_network",
+            "source": "traffic-gen",
+            "variant": "network"
+          },
+          "notes": [],
+          "phase_breakdown_us": {
+            "balance": 0.4547555555555556,
+            "local_intra": 30.60622222222222,
+            "redistribute_unhidden": 5.531733333333333,
+            "scale_out": 94.5056,
+            "scheduling": 0.4
+          },
+          "policy": "fast",
+          "slowdown_vs_lb": 1.5560899054158674,
+          "total_bytes": 77803520.0,
+          "utilization": {},
+          "warnings": []
+        }
+      ],
+      "topology": {
+        "gpus_per_server": 8,
+        "name": "synthetic-two-tier",
+        "num_gpus": 16,
+        "num_servers": 2,
+        "original_num_gpus": 16,
+        "scaleout_gbps": 400.0,
+        "scaleup_gbps": 3600.0,
+        "virtual_gpus": []
+      },
+      "warnings": []
+    }
+  ]
+}

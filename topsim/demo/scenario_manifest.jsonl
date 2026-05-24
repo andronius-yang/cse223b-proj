@@ -1,0 +1,3 @@
+{"id":"healthy","matrix":"healthy_matrix.txt","metadata":{"phase":"dispatch","placement_id":"baseline","view_id":0}}
+{"id":"replicated_steady_state","matrix":"replicated_matrix.txt","metadata":{"phase":"dispatch","placement_id":"replicated","repair_policy":"steady_state","view_id":0}}
+{"id":"gpu7_failed_repaired","matrix":"failed_gpu7_repaired_matrix.txt","failed_gpus":[7],"metadata":{"phase":"dispatch","failed_gpus":[7],"repair_policy":"nearest_replica","view_id":1}}
