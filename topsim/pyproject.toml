@@ -1,0 +1,34 @@
+[project]
+name = "toposim"
+version = "0.1.0"
+description = "Matrix-first topology-aware all-to-allv communication simulator"
+readme = "README.md"
+authors = [
+    { name = "Samvrit Srinath", email = "sasrinath@ucsd.edu" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "matplotlib>=3.10.9",
+    "networkx>=3.6.1",
+    "numpy>=2.4.6",
+    "pandas>=3.0.3",
+    "pydantic>=2.13.4",
+    "pyyaml>=6.0.3",
+    "rich>=15.0.0",
+    "scipy>=1.17.1",
+    "typer>=0.25.1",
+]
+
+[project.scripts]
+toposim = "toposim.cli:app"
+toposim-batch = "toposim.batch_cli:app"
+
+[build-system]
+requires = ["uv_build>=0.11.14,<0.12.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.3",
+    "pytest-cov>=7.1.0",
+]
