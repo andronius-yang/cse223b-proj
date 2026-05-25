@@ -88,15 +88,18 @@ def mro_place(
     recovery is the *set of nodes* each expert occupies, not which GPU within a
     node. Each node holds ``slots_per_node = gpus_per_node * capacity`` replicas.
 
-    Experts are placed in **ascending** replica order; each expert greedily takes
-    the lowest-indexed nodes that still have spare capacity, preferring nodes it
-    does not already occupy (so its replicas land on distinct nodes — the
-    single-node-failure survival guarantee). Placing the *coldest* experts first
-    concentrates them onto a shared low-index prefix of nodes, maximising node-set
-    overlap: a given failure set tends to knock out the same few experts together
-    rather than independently endangering many scattered ones. That overlap is the
-    recovery-maximising property; hot experts then spread across the remaining
-    capacity on all nodes and survive regardless.
+    Experts are placed in **ascending** replica order (coldest first). Each
+    expert's replicas land on *distinct* nodes wherever capacity allows — the
+    single-node-failure survival guarantee when `k_min >= 2`. The first `band`
+    replicas (where `band = min(replica_counts)`, the survival fan-out shared by
+    every expert) go to the lowest-indexed available nodes, so the most vulnerable
+    experts pile onto a common low-index band of nodes. That deliberate overlap is
+    the recovery-maximising property: a failure set tends to knock out the same
+    experts together rather than independently endangering many scattered ones.
+    Surplus replicas (beyond `band`, held only by hotter experts) go to the
+    *least-loaded* node instead, which spreads hot experts across the cluster and —
+    crucially — keeps capacity balanced so late-placed experts never get stranded
+    on a single remaining node (which would silently violate survival).
     """
     num_experts = len(replica_counts)
     slots_per_node = gpus_per_node * capacity
@@ -108,30 +111,28 @@ def mro_place(
         )
 
     node_load = [0] * num_nodes  # replicas placed on each node so far
+    band = max(1, min(replica_counts)) if replica_counts else 1
 
-    def take_node(used: set[int]) -> int:
-        # Lowest-index node with free capacity not yet used by this expert; fall
-        # back to lowest-index node with any free capacity (only needed when an
-        # expert has more replicas than there are distinct free nodes).
-        fallback = -1
-        for node in range(num_nodes):
-            if node_load[node] >= slots_per_node:
-                continue
-            if fallback < 0:
-                fallback = node
-            if node not in used:
-                return node
-        return fallback
+    def candidates(used: set[int]) -> list[int]:
+        free = [n for n in range(num_nodes) if node_load[n] < slots_per_node]
+        distinct = [n for n in free if n not in used]
+        return distinct or free  # reuse a node only when no distinct one is free
 
-    # Place coldest experts first so they share the low-index prefix of nodes.
+    # Coldest experts first so their survival sets share the low-index band.
     order = sorted(range(num_experts), key=lambda e: (replica_counts[e], e))
 
     expert_to_slots: Dict[int, List[Slot]] = {e: [] for e in range(num_experts)}
     slot_to_expert: Dict[Slot, int] = {}
     for expert_id in order:
         used: set[int] = set()
-        for _ in range(replica_counts[expert_id]):
-            node = take_node(used)
+        for k in range(replica_counts[expert_id]):
+            pool = candidates(used)
+            if not pool:
+                break
+            if k < band:
+                node = min(pool)  # concentrate the survival set on the shared band
+            else:
+                node = min(pool, key=lambda n: (node_load[n], n))  # balance surplus
             used.add(node)
             t = node_load[node]  # this node's next free slot index
             node_load[node] += 1
