@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterator
 
 
 NUM_RANKS = 16
@@ -19,6 +19,7 @@ PAYLOAD_BYTES = HIDDEN_SIZE * DTYPE_BYTES
 BATCH_SIZE = NUM_RANKS * REQUESTS_PER_RANK
 
 Matrix = list[list[int]]
+DemandMatrix = list[list[int]]
 
 
 def fail(message: str) -> None:
@@ -106,14 +107,12 @@ def parse_layer_id(path: Path, token_index: int, layer_key: Any) -> int:
         fail(f"{path} token {token_index} has non-integer layer key {layer_key!r}")
 
 
-def add_selected_experts(
-    matrix: Matrix,
+def iter_selected_expert_ids(
     path: Path,
     token_index: int,
     layer_id: int,
-    src_rank: int,
     selected_experts: Any,
-) -> None:
+) -> Iterator[int]:
     if not isinstance(selected_experts, list):
         fail(f"{path} token {token_index} layer {layer_id} selected_experts is not a list")
     if not selected_experts:
@@ -137,8 +136,20 @@ def add_selected_experts(
                     f"{path} token {token_index} layer {layer_id} row {row_index} "
                     f"has non-integer expert id {expert_id!r}"
                 )
-            dst_rank = choose_owner_rank(owner_ranks(layer_id, expert_id))
-            matrix[src_rank][dst_rank] += PAYLOAD_BYTES
+            yield expert_id
+
+
+def add_selected_experts(
+    matrix: Matrix,
+    path: Path,
+    token_index: int,
+    layer_id: int,
+    src_rank: int,
+    selected_experts: Any,
+) -> None:
+    for expert_id in iter_selected_expert_ids(path, token_index, layer_id, selected_experts):
+        dst_rank = choose_owner_rank(owner_ranks(layer_id, expert_id))
+        matrix[src_rank][dst_rank] += PAYLOAD_BYTES
 
 
 def build_layer_matrices(trace_paths: list[Path]) -> dict[int, Matrix]:
@@ -170,6 +181,51 @@ def build_layer_matrices(trace_paths: list[Path]) -> dict[int, Matrix]:
                 )
 
     return layer_matrices
+
+
+def iter_routes(trace_paths: list[Path]) -> Iterator[tuple[int, int, int]]:
+    for request_index, path in enumerate(trace_paths[:BATCH_SIZE]):
+        src_rank = request_index // REQUESTS_PER_RANK
+        trace = load_trace(path)
+        last_token_index = min(DECODE_STEPS, len(trace) - 1)
+
+        for token_index in range(1, last_token_index + 1):
+            token_entry = trace[token_index]
+            if not isinstance(token_entry, dict):
+                fail(f"{path} token {token_index} must be a JSON object")
+
+            for layer_key, selected_experts in token_entry.items():
+                layer_id = parse_layer_id(path, token_index, layer_key)
+                if selected_experts is None:
+                    continue
+                for expert_id in iter_selected_expert_ids(
+                    path, token_index, layer_id, selected_experts
+                ):
+                    yield layer_id, src_rank, expert_id
+
+
+def new_demand_matrix() -> DemandMatrix:
+    return [[0 for _ in range(NUM_EXPERTS)] for _ in range(NUM_RANKS)]
+
+
+def build_demand_matrices(trace_paths: list[Path]) -> dict[int, DemandMatrix]:
+    demand: dict[int, DemandMatrix] = {}
+    for layer_id, src_rank, expert_id in iter_routes(trace_paths):
+        if expert_id < 0 or expert_id >= NUM_EXPERTS:
+            fail(f"expert id {expert_id} in layer {layer_id} is outside 0..{NUM_EXPERTS - 1}")
+        layer = demand.setdefault(layer_id, new_demand_matrix())
+        layer[src_rank][expert_id] += PAYLOAD_BYTES
+    return demand
+
+
+def aggregate_demand(demand: dict[int, DemandMatrix]) -> DemandMatrix:
+    total = new_demand_matrix()
+    for layer in demand.values():
+        for src in range(NUM_RANKS):
+            row = layer[src]
+            for expert in range(NUM_EXPERTS):
+                total[src][expert] += row[expert]
+    return total
 
 
 def network_matrix(original: Matrix) -> Matrix:
