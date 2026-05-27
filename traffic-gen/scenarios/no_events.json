@@ -1,0 +1,6 @@
+{
+  "scenario_id": "no_events",
+  "ranks_per_node": 4,
+  "capacity_per_rank_per_layer": 16,
+  "events": []
+}

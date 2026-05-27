@@ -1,0 +1,9 @@
+{
+  "scenario_id": "node1_fail_join",
+  "ranks_per_node": 4,
+  "capacity_per_rank_per_layer": 16,
+  "events": [
+    {"step": 100, "type": "fail", "node": 1},
+    {"step": 200, "type": "join", "node": 1}
+  ]
+}
