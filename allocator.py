@@ -3,7 +3,7 @@ from __future__ import annotations
 import heapq
 import random
 from dataclasses import dataclass
-from typing import Dict, List, Sequence, Tuple
+from typing import Callable, Dict, List, Sequence, Tuple
 
 
 @dataclass(frozen=True)
@@ -73,6 +73,74 @@ def allocate_replicas(
         heapq.heappush(heap, (-priority(expert_id), expert_id))
 
     return counts
+
+
+def uniform_replicas(
+    expert_loads: Sequence[float], num_slots: int, k_min: int = 2
+) -> List[int]:
+    """Fixed, **load-agnostic** replication — the non-adaptive baseline.
+
+    Every expert gets the same replica count, as evenly as the slot budget
+    allows: ``base = num_slots // E`` each, with the ``num_slots % E`` leftover
+    slots handed to the lowest expert ids (deterministic), so counts differ by at
+    most one. Unlike :func:`allocate_replicas`, hot and cold experts are
+    replicated identically; ``expert_loads`` is ignored and accepted only so this
+    is a drop-in replacement (same signature, same ``num_slots`` invariant).
+
+    When ``num_slots`` is a multiple of ``E`` this gives *exactly* ``num_slots/E``
+    replicas per expert — e.g. ``E=128`` with ``capacity=16`` on 16 ranks
+    (``num_slots=256``) is a flat 2 replicas each. Because ``base >= k_min``
+    whenever ``num_slots >= E * k_min`` (the guard below), the per-expert minimum
+    is always satisfied.
+    """
+    num_experts = len(expert_loads)
+    if k_min < 0:
+        raise ValueError("k_min must be non-negative")
+    if num_experts == 0:
+        if num_slots != 0:
+            raise ValueError("num_slots must be 0 when there are no experts")
+        return []
+    if num_slots < num_experts * k_min:
+        raise ValueError(
+            f"num_slots={num_slots} < E*k_min={num_experts * k_min}: "
+            "not enough slots to give every expert its minimum replicas"
+        )
+
+    base, remainder = divmod(num_slots, num_experts)
+    return [base + 1 if e < remainder else base for e in range(num_experts)]
+
+
+# Replication strategies: each maps (expert_loads, num_slots, k_min) -> per-expert
+# replica counts summing to num_slots. "adaptive" is Lazarus (load-proportional,
+# paper §4.1); "uniform" is the fixed load-agnostic baseline to compare against.
+ReplicationStrategy = Callable[[Sequence[float], int, int], List[int]]
+
+REPLICATION_STRATEGIES: Dict[str, ReplicationStrategy] = {
+    "adaptive": allocate_replicas,
+    "uniform": uniform_replicas,
+}
+
+
+def allocate_replica_counts(
+    expert_loads: Sequence[float],
+    num_slots: int,
+    k_min: int = 2,
+    strategy: str = "adaptive",
+) -> List[int]:
+    """Dispatch to a named replication strategy (see ``REPLICATION_STRATEGIES``).
+
+    ``strategy="adaptive"`` is Lazarus's load-proportional allocator;
+    ``strategy="uniform"`` is the fixed, load-agnostic baseline. Both return
+    counts summing to ``num_slots``, so either can feed the same placement step.
+    """
+    try:
+        allocate = REPLICATION_STRATEGIES[strategy]
+    except KeyError:
+        raise ValueError(
+            f"unknown replication strategy {strategy!r}; "
+            f"choose from {sorted(REPLICATION_STRATEGIES)}"
+        ) from None
+    return allocate(expert_loads, num_slots, k_min)
 
 
 def mro_place(
@@ -149,10 +217,18 @@ def plan_layer(
     gpus_per_node: int,
     capacity: int = 1,
     k_min: int = 2,
+    strategy: str = "adaptive",
 ) -> Tuple[List[int], Placement]:
-    """Allocate replicas then place them. Convenience wrapper over both."""
+    """Allocate replicas then place them. Convenience wrapper over both.
+
+    ``strategy`` selects the replication policy: ``"adaptive"`` (Lazarus,
+    load-proportional) or ``"uniform"`` (fixed replicas/expert). MRO placement is
+    unchanged either way — only the per-expert replica *counts* differ.
+    """
     num_slots = num_nodes * gpus_per_node * capacity
-    replica_counts = allocate_replicas(expert_loads, num_slots, k_min=k_min)
+    replica_counts = allocate_replica_counts(
+        expert_loads, num_slots, k_min=k_min, strategy=strategy
+    )
     placement = mro_place(replica_counts, num_nodes, gpus_per_node, capacity=capacity)
     return replica_counts, placement
 

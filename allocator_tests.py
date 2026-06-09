@@ -8,10 +8,12 @@ from typing import List, Sequence
 from allocator import (
     Placement,
     Slot,
+    allocate_replica_counts,
     allocate_replicas,
     mro_place,
     plan_layer,
     recovery_probability,
+    uniform_replicas,
 )
 
 
@@ -61,6 +63,65 @@ def test_allocate_too_few_slots() -> None:
     raise AssertionError("expected ValueError when num_slots < E*k_min")
 
 
+def test_uniform_even_split() -> None:
+    # 256 slots / 128 experts = flat 2 each, regardless of load skew.
+    skewed = [1000, 1] + [1] * 126
+    assert uniform_replicas(skewed, 256, k_min=2) == [2] * 128
+    # Uniform ignores load: same output as a flat load vector.
+    assert uniform_replicas([1] * 128, 256, k_min=2) == [2] * 128
+
+
+def test_uniform_remainder_to_low_ids() -> None:
+    # 18 slots / 4 experts = base 4, remainder 2 -> first two experts get 5.
+    counts = uniform_replicas([10, 10, 10, 10], 18, k_min=2)
+    assert counts == [5, 5, 4, 4]
+    assert sum(counts) == 18
+
+
+def test_uniform_load_agnostic_vs_adaptive() -> None:
+    # With headroom and skew, adaptive concentrates on the hot expert; uniform
+    # does not. This is the whole point of the fixed baseline.
+    loads = [1000, 1, 1, 1]
+    adaptive = allocate_replicas(loads, 32, k_min=2)
+    uniform = uniform_replicas(loads, 32, k_min=2)
+    assert adaptive[0] > uniform[0], (adaptive, uniform)
+    assert max(uniform) - min(uniform) <= 1  # uniform stays flat
+
+
+def test_uniform_too_few_slots() -> None:
+    try:
+        uniform_replicas([1, 1, 1, 1], 7, k_min=2)  # needs >= 8
+    except ValueError:
+        return
+    raise AssertionError("expected ValueError when num_slots < E*k_min")
+
+
+def test_strategy_dispatch() -> None:
+    loads = [1000, 1, 1, 1]
+    assert allocate_replica_counts(loads, 32, strategy="adaptive") == allocate_replicas(
+        loads, 32, k_min=2
+    )
+    assert allocate_replica_counts(loads, 32, strategy="uniform") == uniform_replicas(
+        loads, 32, k_min=2
+    )
+    try:
+        allocate_replica_counts(loads, 32, strategy="nope")
+    except ValueError:
+        return
+    raise AssertionError("expected ValueError for unknown strategy")
+
+
+def test_plan_layer_uniform_survives() -> None:
+    # Fixed replication still places via MRO -> survives any single-node failure.
+    loads = [128 - e for e in range(128)]
+    counts, placement = plan_layer(
+        loads, num_nodes=4, gpus_per_node=4, capacity=16, k_min=2, strategy="uniform"
+    )
+    assert counts == [2] * 128  # load-agnostic at this tight budget
+    for node in range(4):
+        assert placement.survives([node]), f"lost an expert when node {node} failed"
+
+
 def test_survival_capacity_one() -> None:
     # 4x4 cluster, capacity=1 (16 slots), imbalanced load.
     _, placement = plan_layer([100, 50, 20, 5], num_nodes=4, gpus_per_node=4, k_min=2)
@@ -98,6 +159,12 @@ def main() -> None:
         test_allocate_uniform,
         test_allocate_skewed,
         test_allocate_too_few_slots,
+        test_uniform_even_split,
+        test_uniform_remainder_to_low_ids,
+        test_uniform_load_agnostic_vs_adaptive,
+        test_uniform_too_few_slots,
+        test_strategy_dispatch,
+        test_plan_layer_uniform_survives,
         test_survival_capacity_one,
         test_survival_capacity_many,
         test_mro_beats_random_recovery,

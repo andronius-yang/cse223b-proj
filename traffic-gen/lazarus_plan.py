@@ -23,6 +23,7 @@ NUM_NODES = 4                       # servers = failure domain
 GPUS_PER_NODE = 4                   # GPUs per server (4 servers x 4 = 16 ranks)
 CAPACITY = 32                       # slots/GPU: 4*4*32 = 512 >> 128*k_min, leaves adaptive room
 K_MIN = 2                           # survive any single server failure
+REPLICATION_STRATEGY = "adaptive"   # "adaptive" (Lazarus) or "uniform" (fixed replicas/expert)
 GPUS_PER_SERVER = GPUS_PER_NODE     # toposim server == Lazarus node here
 FAIL_NODE = 1                       # fail server 1 (its ranks die together)
 
@@ -60,9 +61,14 @@ def build_scenarios() -> dict:
         for expert in range(generate.NUM_EXPERTS)
     }
 
-    # Lazarus: adaptive replicas + MRO placement.
+    # Replicated: chosen strategy ("adaptive" Lazarus / "uniform" fixed) + MRO placement.
     replica_counts, placement = plan_layer(
-        loads, NUM_NODES, GPUS_PER_NODE, capacity=CAPACITY, k_min=K_MIN
+        loads,
+        NUM_NODES,
+        GPUS_PER_NODE,
+        capacity=CAPACITY,
+        k_min=K_MIN,
+        strategy=REPLICATION_STRATEGY,
     )
     repl_ranks = expert_ranks(placement, GPUS_PER_NODE)
     survivors, collapsed = repair(repl_ranks, FAILED_RANKS)
@@ -101,6 +107,7 @@ def write_artifacts(scenarios: dict) -> Path:
             "metadata": {
                 "phase": "dispatch",
                 "placement_id": "lazarus_mro",
+                "replication_strategy": REPLICATION_STRATEGY,
                 "k_min": K_MIN,
                 "capacity": CAPACITY,
             },
@@ -112,6 +119,7 @@ def write_artifacts(scenarios: dict) -> Path:
             "metadata": {
                 "phase": "dispatch",
                 "placement_id": "lazarus_mro",
+                "replication_strategy": REPLICATION_STRATEGY,
                 "repair_policy": "surviving_replicas",
                 "failed_server": FAIL_NODE,
                 "failed_gpus": FAILED_RANKS,
@@ -142,6 +150,7 @@ def run_toposim(manifest: Path) -> dict | None:
 def print_summary(scenarios: dict, results: dict | None) -> None:
     counts = scenarios["replica_counts"]
     print(f"\nlayers observed: {len(scenarios['layers'])}")
+    print(f"replication strategy: {REPLICATION_STRATEGY}")
     print(f"replicas/expert: min={min(counts)} max={max(counts)} sum={sum(counts)} (E=128)")
     print(
         f"collapsed experts after server{FAIL_NODE} failure "
