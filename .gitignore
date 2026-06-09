@@ -7,8 +7,6 @@
 **/__pycache__/
 *.py[cod]
 
-# traffic gen ephemeral outputs
-traffic-gen/out/
-
+traffic-gen/docs
 # toposim env
 topsim/uv.lock
