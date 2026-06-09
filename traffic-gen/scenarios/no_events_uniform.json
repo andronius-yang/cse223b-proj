@@ -1,0 +1,7 @@
+{
+  "scenario_id": "no_events_uniform",
+  "ranks_per_node": 4,
+  "capacity_per_rank_per_layer": 32,
+  "replication_strategy": "uniform",
+  "events": []
+}
