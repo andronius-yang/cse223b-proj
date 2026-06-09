@@ -15,11 +15,17 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from allocator import Placement, Slot, allocate_replicas  # noqa: E402
+from allocator import (  # noqa: E402
+    REPLICATION_STRATEGIES,
+    Placement,
+    Slot,
+    allocate_replica_counts,
+)
 
 
 DEFAULT_RANKS_PER_NODE = 4
 DEFAULT_CAPACITY_PER_RANK_PER_LAYER = 16
+DEFAULT_REPLICATION_STRATEGY = "adaptive"
 K_MIN = 2
 EXPERT_STATE_BYTES = 251_658_240
 SCENARIO_ROOT = generate.OUTPUT_DIR / "scenarios"
@@ -35,6 +41,7 @@ class ScenarioConfig:
     scenario_id: str
     ranks_per_node: int
     capacity_per_rank_per_layer: int
+    replication_strategy: str
     events: list["NodeEvent"]
 
 
@@ -108,6 +115,14 @@ def load_config(path: Path) -> ScenarioConfig:
         ),
         "capacity_per_rank_per_layer",
     )
+    replication_strategy = data.get(
+        "replication_strategy", DEFAULT_REPLICATION_STRATEGY
+    )
+    if replication_strategy not in REPLICATION_STRATEGIES:
+        fail(
+            f"replication_strategy must be one of "
+            f"{sorted(REPLICATION_STRATEGIES)}, got {replication_strategy!r}"
+        )
     if ranks_per_node <= 0:
         fail("ranks_per_node must be positive")
     if capacity <= 0:
@@ -169,6 +184,7 @@ def load_config(path: Path) -> ScenarioConfig:
         scenario_id=scenario_id,
         ranks_per_node=ranks_per_node,
         capacity_per_rank_per_layer=capacity,
+        replication_strategy=replication_strategy,
         events=events,
     )
 
@@ -320,11 +336,13 @@ def baseline_pinned_place(
     expert_loads: list[float],
     ranks_per_node: int,
     capacity_per_rank: int,
+    replication_strategy: str = DEFAULT_REPLICATION_STRATEGY,
 ) -> Placement:
-    replica_counts = allocate_replicas(
+    replica_counts = allocate_replica_counts(
         expert_loads,
         generate.NUM_RANKS * capacity_per_rank,
         k_min=K_MIN,
+        strategy=replication_strategy,
     )
     expert_to_slots: dict[int, list[Slot]] = {
         expert_id: [] for expert_id in range(generate.NUM_EXPERTS)
@@ -392,6 +410,7 @@ def build_layer_plans(
                 expert_loads=loads,
                 ranks_per_node=config.ranks_per_node,
                 capacity_per_rank=config.capacity_per_rank_per_layer,
+                replication_strategy=config.replication_strategy,
             ),
         )
     return plans
@@ -741,6 +760,7 @@ def run_scenario(config: ScenarioConfig, streams: list[RequestStream], plans: di
                         for node in range(generate.NUM_RANKS // config.ranks_per_node)
                     ],
                     "capacity_per_rank_per_layer": config.capacity_per_rank_per_layer,
+                    "replication_strategy": config.replication_strategy,
                     "k_min": K_MIN,
                     "expert_state_bytes": EXPERT_STATE_BYTES,
                     "payload_bytes": generate.PAYLOAD_BYTES,

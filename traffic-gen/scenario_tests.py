@@ -190,7 +190,7 @@ def test_integration_no_events() -> None:
     if not _traces_available():
         print("  SKIP test_integration_no_events (no traces in cwd)")
         return
-    code, rows = _run(ScenarioConfig("no_events", 4, 16, []))
+    code, rows = _run(ScenarioConfig("no_events", 4, 16, "adaptive", []))
     kinds = [r["kind"] for r in rows]
     assert code == 0
     assert kinds[0] == "scenario_header"
@@ -202,7 +202,7 @@ def test_integration_node_fail_join_survives() -> None:
     if not _traces_available():
         print("  SKIP test_integration_node_fail_join_survives (no traces in cwd)")
         return
-    code, rows = _run(ScenarioConfig("node1_fail_join", 4, 16,
+    code, rows = _run(ScenarioConfig("node1_fail_join", 4, 16, "adaptive",
                                      [NodeEvent(100, "fail", 1), NodeEvent(200, "join", 1)]))
     kinds = [r["kind"] for r in rows]
     assert code == 0
@@ -219,7 +219,7 @@ def test_integration_terminal_failure() -> None:
         print("  SKIP test_integration_terminal_failure (no traces in cwd)")
         return
     # Fail two nodes with no rejoin: some expert had both replicas on {0,1}.
-    code, rows = _run(ScenarioConfig("two_fail", 4, 16,
+    code, rows = _run(ScenarioConfig("two_fail", 4, 16, "adaptive",
                                      [NodeEvent(5, "fail", 0), NodeEvent(10, "fail", 1)]))
     assert code == 1
     assert rows[-1]["kind"] == "terminal_failure"
