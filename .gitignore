@@ -10,3 +10,5 @@
 traffic-gen/docs
 # toposim env
 topsim/uv.lock
+
+**/tests/

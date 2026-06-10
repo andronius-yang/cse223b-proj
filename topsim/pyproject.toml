@@ -22,6 +22,7 @@ dependencies = [
 [project.scripts]
 toposim = "toposim.cli:app"
 toposim-batch = "toposim.batch_cli:app"
+toposim-timeline = "toposim.timeline_cli:app"
 
 [build-system]
 requires = ["uv_build>=0.11.14,<0.12.0"]
