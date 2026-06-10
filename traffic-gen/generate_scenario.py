@@ -723,6 +723,8 @@ def run_scenario(config: ScenarioConfig, streams: list[RequestStream], plans: di
 
                 if event_index < len(events) and events[event_index].step == step:
                     event = events[event_index]
+                    migration_matrix = None
+                    disk_bytes = 0
                     if event.event_type == "fail":
                         live_nodes.remove(event.node)
                         failed_nodes_set.add(event.node)
@@ -730,27 +732,6 @@ def run_scenario(config: ScenarioConfig, streams: list[RequestStream], plans: di
                     else:
                         live_nodes.add(event.node)
                         failed_nodes_set.remove(event.node)
-
-                    write_jsonl(
-                        timeline_handle,
-                        {
-                            "step": step,
-                            "kind": "node_event",
-                            **state_fields(
-                                streams,
-                                live_nodes,
-                                failed_nodes_set,
-                                config.ranks_per_node,
-                            ),
-                            "metadata": {
-                                "event_type": event.event_type,
-                                "node": event.node,
-                            },
-                        },
-                    )
-                    event_index += 1
-
-                    if event.event_type == "join":
                         migration_matrix, disk_bytes = build_join_repair_matrix(
                             plans=plans,
                             current_slots=current_slots,
@@ -758,22 +739,27 @@ def run_scenario(config: ScenarioConfig, streams: list[RequestStream], plans: di
                             live_nodes=live_nodes,
                             ranks_per_node=config.ranks_per_node,
                         )
-                        if disk_bytes:
-                            write_jsonl(
-                                timeline_handle,
-                                {
-                                    "step": step,
-                                    "kind": "expert_disk_io",
-                                    "total_bytes": disk_bytes,
-                                    **state_fields(
-                                        streams,
-                                        live_nodes,
-                                        failed_nodes_set,
-                                        config.ranks_per_node,
-                                    ),
-                                },
-                            )
 
+                    node_event_row = {
+                        "step": step,
+                        "kind": "node_event",
+                        **state_fields(
+                            streams,
+                            live_nodes,
+                            failed_nodes_set,
+                            config.ranks_per_node,
+                        ),
+                        "metadata": {
+                            "event_type": event.event_type,
+                            "node": event.node,
+                        },
+                    }
+                    if disk_bytes:
+                        node_event_row["lost_expert_bytes"] = disk_bytes
+                    write_jsonl(timeline_handle, node_event_row)
+                    event_index += 1
+
+                    if migration_matrix is not None:
                         migration_bytes = total_bytes(migration_matrix)
                         if migration_bytes:
                             migration_path = (
