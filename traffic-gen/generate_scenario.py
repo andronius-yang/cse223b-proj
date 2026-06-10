@@ -19,7 +19,7 @@ from allocator import (  # noqa: E402
     REPLICATION_STRATEGIES,
     Placement,
     Slot,
-    allocate_replica_counts,
+    plan_layer,
 )
 
 
@@ -289,129 +289,24 @@ def baseline_owner_rank(layer_id: int, expert_id: int) -> int:
     return generate.choose_owner_rank(generate.owner_ranks(layer_id, expert_id))
 
 
-def add_slot(
-    expert_to_slots: dict[int, list[Slot]],
-    slot_to_expert: dict[Slot, int],
-    expert_id: int,
-    slot: Slot,
-) -> None:
-    expert_to_slots[expert_id].append(slot)
-    slot_to_expert[slot] = expert_id
-
-
-def choose_node_with_capacity(
-    node_capacity: list[int],
-    used_nodes: set[int],
-) -> int:
-    fallback = -1
-    for node, capacity in enumerate(node_capacity):
-        if capacity <= 0:
-            continue
-        if fallback < 0:
-            fallback = node
-        if node not in used_nodes:
-            return node
-    return fallback
-
-
-def choose_rank_on_node(
-    node: int,
-    ranks_per_node: int,
-    rank_used: list[int],
-    capacity_per_rank: int,
-) -> int:
-    start = node * ranks_per_node
-    candidates = [
-        rank
-        for rank in range(start, start + ranks_per_node)
-        if rank_used[rank] < capacity_per_rank
-    ]
-    if not candidates:
-        fail(f"node {node} has no remaining placement capacity")
-    return min(candidates, key=lambda rank: (rank_used[rank], rank))
-
-
-def baseline_pinned_place(
-    layer_id: int,
-    expert_loads: list[float],
-    ranks_per_node: int,
-    capacity_per_rank: int,
-    replication_strategy: str = DEFAULT_REPLICATION_STRATEGY,
-) -> Placement:
-    replica_counts = allocate_replica_counts(
-        expert_loads,
-        generate.NUM_RANKS * capacity_per_rank,
-        k_min=K_MIN,
-        strategy=replication_strategy,
-    )
-    expert_to_slots: dict[int, list[Slot]] = {
-        expert_id: [] for expert_id in range(generate.NUM_EXPERTS)
-    }
-    slot_to_expert: dict[Slot, int] = {}
-    rank_used = [0 for _ in range(generate.NUM_RANKS)]
-    remaining = list(replica_counts)
-
-    for expert_id in range(generate.NUM_EXPERTS):
-        owner_rank = baseline_owner_rank(layer_id, expert_id)
-        if remaining[expert_id] <= 0 or rank_used[owner_rank] >= capacity_per_rank:
-            continue
-        slot = Slot(
-            node=rank_to_node(owner_rank, ranks_per_node),
-            local_rank=owner_rank % ranks_per_node,
-            slot=rank_used[owner_rank],
-        )
-        rank_used[owner_rank] += 1
-        remaining[expert_id] -= 1
-        add_slot(expert_to_slots, slot_to_expert, expert_id, slot)
-
-    num_nodes = generate.NUM_RANKS // ranks_per_node
-    node_capacity = [
-        sum(
-            capacity_per_rank - rank_used[rank]
-            for rank in range(node * ranks_per_node, (node + 1) * ranks_per_node)
-        )
-        for node in range(num_nodes)
-    ]
-
-    order = sorted(range(generate.NUM_EXPERTS), key=lambda e: (replica_counts[e], e))
-    for expert_id in order:
-        used_nodes = {slot.node for slot in expert_to_slots[expert_id]}
-        for _ in range(remaining[expert_id]):
-            node = choose_node_with_capacity(node_capacity, used_nodes)
-            if node < 0:
-                fail(f"could not place replica for layer {layer_id} expert {expert_id}")
-            rank = choose_rank_on_node(
-                node=node,
-                ranks_per_node=ranks_per_node,
-                rank_used=rank_used,
-                capacity_per_rank=capacity_per_rank,
-            )
-            slot = Slot(node=node, local_rank=rank % ranks_per_node, slot=rank_used[rank])
-            rank_used[rank] += 1
-            node_capacity[node] -= 1
-            used_nodes.add(node)
-            add_slot(expert_to_slots, slot_to_expert, expert_id, slot)
-
-    if sum(rank_used) != generate.NUM_RANKS * capacity_per_rank:
-        fail(f"layer {layer_id} placement did not fill all replica slots")
-    return Placement(expert_to_slots=expert_to_slots, slot_to_expert=slot_to_expert)
-
-
 def build_layer_plans(
     layer_loads: dict[int, list[float]],
     config: ScenarioConfig,
 ) -> dict[int, LayerPlan]:
     plans: dict[int, LayerPlan] = {}
+    num_nodes = generate.NUM_RANKS // config.ranks_per_node
     for layer_id, loads in layer_loads.items():
+        _, placement = plan_layer(
+            loads,
+            num_nodes=num_nodes,
+            gpus_per_node=config.ranks_per_node,
+            capacity=config.capacity_per_rank_per_layer,
+            k_min=K_MIN,
+            strategy=config.replication_strategy,
+        )
         plans[layer_id] = LayerPlan(
             layer_id=layer_id,
-            placement=baseline_pinned_place(
-                layer_id=layer_id,
-                expert_loads=loads,
-                ranks_per_node=config.ranks_per_node,
-                capacity_per_rank=config.capacity_per_rank_per_layer,
-                replication_strategy=config.replication_strategy,
-            ),
+            placement=placement,
         )
     return plans
 
@@ -567,7 +462,7 @@ def remove_failed_node_state(
 def choose_repair_source(
     current_slots: dict[ExpertKey, set[Slot]],
     key: ExpertKey,
-    dst_node: int,
+    dst_slot: Slot,
     live_nodes: set[int],
     ranks_per_node: int,
 ) -> Slot | None:
@@ -576,9 +471,19 @@ def choose_repair_source(
     ]
     if not candidates:
         return None
-    same_node = [slot for slot in candidates if slot.node == dst_node]
-    source_pool = same_node if same_node else candidates
-    return min(source_pool, key=lambda slot: (slot_rank(slot, ranks_per_node), slot.slot))
+    same_node = [slot for slot in candidates if slot.node == dst_slot.node]
+    if same_node:
+        return min(same_node, key=lambda slot: (slot_rank(slot, ranks_per_node), slot.slot))
+
+    dst_rank = slot_rank(dst_slot, ranks_per_node)
+    candidate_ranks = {slot_rank(slot, ranks_per_node) for slot in candidates}
+    source_rank = circular_rank_search(dst_rank, candidate_ranks)
+    if source_rank is None:
+        return None
+    return min(
+        (slot for slot in candidates if slot_rank(slot, ranks_per_node) == source_rank),
+        key=lambda slot: slot.slot,
+    )
 
 
 def build_join_repair_matrix(
@@ -587,8 +492,9 @@ def build_join_repair_matrix(
     joined_node: int,
     live_nodes: set[int],
     ranks_per_node: int,
-) -> tuple[Matrix, str | None]:
+) -> tuple[Matrix, int]:
     matrix = generate.new_matrix()
+    disk_bytes = 0
     for layer_id in sorted(plans):
         plan = plans[layer_id]
         for expert_id in range(generate.NUM_EXPERTS):
@@ -604,21 +510,19 @@ def build_join_repair_matrix(
                 src_slot = choose_repair_source(
                     current_slots=current_slots,
                     key=key,
-                    dst_node=joined_node,
+                    dst_slot=dst_slot,
                     live_nodes=live_nodes,
                     ranks_per_node=ranks_per_node,
                 )
                 if src_slot is None:
-                    return matrix, (
-                        f"no live replica to repair layer {layer_id} expert {expert_id} "
-                        f"onto node {joined_node}"
-                    )
-                src_rank = slot_rank(src_slot, ranks_per_node)
-                dst_rank = slot_rank(dst_slot, ranks_per_node)
-                if src_rank != dst_rank:
-                    matrix[src_rank][dst_rank] += EXPERT_STATE_BYTES
+                    disk_bytes += EXPERT_STATE_BYTES
+                else:
+                    src_rank = slot_rank(src_slot, ranks_per_node)
+                    dst_rank = slot_rank(dst_slot, ranks_per_node)
+                    if src_rank != dst_rank:
+                        matrix[src_rank][dst_rank] += EXPERT_STATE_BYTES
                 current_slots.setdefault(key, set()).add(dst_slot)
-    return matrix, None
+    return matrix, disk_bytes
 
 
 def live_replica_ranks(
@@ -635,20 +539,28 @@ def live_replica_ranks(
     return sorted(ranks)
 
 
+def circular_rank_search(start_rank: int, candidate_ranks: set[int]) -> int | None:
+    for offset in range(generate.NUM_RANKS):
+        rank = (start_rank + offset) % generate.NUM_RANKS
+        if rank in candidate_ranks:
+            return rank
+    return None
+
+
 def choose_route_destination(
     src_rank: int,
     replica_ranks: list[int],
     ranks_per_node: int,
-) -> int:
-    if src_rank in replica_ranks:
-        return src_rank
+) -> int | None:
+    if not replica_ranks:
+        return None
     src_node = rank_to_node(src_rank, ranks_per_node)
     same_node = [
         rank for rank in replica_ranks if rank_to_node(rank, ranks_per_node) == src_node
     ]
     if same_node:
-        return same_node[0]
-    return replica_ranks[0]
+        return min(same_node)
+    return circular_rank_search(src_rank, set(replica_ranks))
 
 
 def build_all2allv_matrix(
@@ -656,7 +568,7 @@ def build_all2allv_matrix(
     current_slots: dict[ExpertKey, set[Slot]],
     live_nodes: set[int],
     ranks_per_node: int,
-) -> tuple[Matrix, dict[str, int], list[RequestStream], dict[str, Any] | None]:
+) -> tuple[Matrix, dict[str, int], list[RequestStream]]:
     matrix = generate.new_matrix()
     histogram: dict[str, int] = {}
     advancing: list[RequestStream] = []
@@ -668,9 +580,7 @@ def build_all2allv_matrix(
             continue
 
         item = stream.work[stream.cursor]
-        cursor_key = f"tok{item.token_index}_layer{item.layer_id}"
-        histogram[cursor_key] = histogram.get(cursor_key, 0) + 1
-        advancing.append(stream)
+        destinations: list[int] = []
 
         for expert_id in item.expert_ids:
             key = (item.layer_id, expert_id)
@@ -680,25 +590,27 @@ def build_all2allv_matrix(
                 live_nodes=live_nodes,
                 ranks_per_node=ranks_per_node,
             )
-            if not replicas:
-                return matrix, histogram, advancing, {
-                    "reason": "unservable_layer_expert",
-                    "source_rank": stream.source_rank,
-                    "local_request_index": stream.local_request_index,
-                    "trace": str(stream.path),
-                    "token_index": item.token_index,
-                    "layer_id": item.layer_id,
-                    "expert_id": expert_id,
-                }
             dst_rank = choose_route_destination(
                 src_rank=stream.source_rank,
                 replica_ranks=replicas,
                 ranks_per_node=ranks_per_node,
             )
+            if dst_rank is None:
+                destinations = []
+                break
+            destinations.append(dst_rank)
+
+        if not destinations:
+            continue
+
+        cursor_key = f"tok{item.token_index}_layer{item.layer_id}"
+        histogram[cursor_key] = histogram.get(cursor_key, 0) + 1
+        advancing.append(stream)
+        for dst_rank in destinations:
             if stream.source_rank != dst_rank:
                 matrix[stream.source_rank][dst_rank] += generate.PAYLOAD_BYTES
 
-    return matrix, histogram, advancing, None
+    return matrix, histogram, advancing
 
 
 def all_completed(streams: list[RequestStream]) -> bool:
@@ -839,24 +751,28 @@ def run_scenario(config: ScenarioConfig, streams: list[RequestStream], plans: di
                     event_index += 1
 
                     if event.event_type == "join":
-                        migration_matrix, failure_reason = build_join_repair_matrix(
+                        migration_matrix, disk_bytes = build_join_repair_matrix(
                             plans=plans,
                             current_slots=current_slots,
                             joined_node=event.node,
                             live_nodes=live_nodes,
                             ranks_per_node=config.ranks_per_node,
                         )
-                        if failure_reason is not None:
-                            write_terminal_failure(
-                                timeline_handle=timeline_handle,
-                                step=step,
-                                reason={"reason": "repair_failed", "detail": failure_reason},
-                                streams=streams,
-                                live_nodes=live_nodes,
-                                failed_nodes_set=failed_nodes_set,
-                                ranks_per_node=config.ranks_per_node,
+                        if disk_bytes:
+                            write_jsonl(
+                                timeline_handle,
+                                {
+                                    "step": step,
+                                    "kind": "expert_disk_io",
+                                    "total_bytes": disk_bytes,
+                                    **state_fields(
+                                        streams,
+                                        live_nodes,
+                                        failed_nodes_set,
+                                        config.ranks_per_node,
+                                    ),
+                                },
                             )
-                            return 1
 
                         migration_bytes = total_bytes(migration_matrix)
                         if migration_bytes:
@@ -887,17 +803,20 @@ def run_scenario(config: ScenarioConfig, streams: list[RequestStream], plans: di
                     streams, failed_nodes_set, config.ranks_per_node
                 )
                 if counts_before["live_request_streams"]:
-                    matrix, histogram, advancing, terminal_reason = build_all2allv_matrix(
+                    matrix, histogram, advancing = build_all2allv_matrix(
                         streams=streams,
                         current_slots=current_slots,
                         live_nodes=live_nodes,
                         ranks_per_node=config.ranks_per_node,
                     )
-                    if terminal_reason is not None:
+                    if not advancing:
+                        if event_index < len(events):
+                            step += 1
+                            continue
                         write_terminal_failure(
                             timeline_handle=timeline_handle,
                             step=step,
-                            reason=terminal_reason,
+                            reason={"reason": "deadlock_all_live_streams_blocked"},
                             streams=streams,
                             live_nodes=live_nodes,
                             failed_nodes_set=failed_nodes_set,
