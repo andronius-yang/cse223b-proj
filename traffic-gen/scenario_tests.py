@@ -159,6 +159,14 @@ def _single_expert_plan() -> dict[int, LayerPlan]:
     return {7: LayerPlan(layer_id=7, placement=placement)}
 
 
+def _join_only_expert_plan() -> dict[int, LayerPlan]:
+    slot = Slot(node=1, local_rank=0, slot=0)
+    expert_to_slots = {e: [] for e in range(gs.generate.NUM_EXPERTS)}
+    expert_to_slots[5] = [slot]
+    placement = Placement(expert_to_slots=expert_to_slots, slot_to_expert={slot: 5})
+    return {7: LayerPlan(layer_id=7, placement=placement)}
+
+
 def test_initial_replication_sources_from_owner() -> None:
     m = gs.build_initial_replication_matrix(_single_expert_plan(), ranks_per_node=4)
     assert m[0][4] == EXPERT_STATE_BYTES          # owner(0) -> remote replica(4)
@@ -201,6 +209,41 @@ def test_join_repair_uses_disk_when_no_live_source() -> None:
     assert disk_bytes == EXPERT_STATE_BYTES
     assert gs.total_bytes(m) == 0
     assert Slot(node=1, local_rank=0, slot=0) in current[(7, 5)]
+    assert gs.live_replica_ranks(current, (7, 5), {1}, 4) == [4]
+
+    m2, disk_bytes2 = gs.build_join_repair_matrix(
+        plans=plans, current_slots=current, joined_node=1,
+        live_nodes={1}, ranks_per_node=4)
+    assert disk_bytes2 == 0
+    assert gs.total_bytes(m2) == 0
+    assert gs.live_replica_ranks(current, (7, 5), {1}, 4) == [4]
+
+
+def test_join_node_event_reports_lost_expert_bytes() -> None:
+    stream = gs.RequestStream(
+        source_rank=4,
+        local_request_index=0,
+        path=Path("trace.json"),
+        work=[gs.WorkItem(token_index=1, layer_id=7, expert_ids=(5,))],
+    )
+    config = ScenarioConfig("disk_join", 4, 16, "adaptive",
+                            [NodeEvent(0, "fail", 1), NodeEvent(1, "join", 1)])
+    old_root = gs.SCENARIO_ROOT
+    with tempfile.TemporaryDirectory() as d:
+        gs.SCENARIO_ROOT = Path(d)
+        try:
+            code = gs.run_scenario(config, [stream], _join_only_expert_plan())
+            rows = [json.loads(l) for l in
+                    (gs.SCENARIO_ROOT / config.scenario_id / "scenario_timeline.jsonl").open()]
+        finally:
+            gs.SCENARIO_ROOT = old_root
+
+    join_events = [r for r in rows
+                   if r["kind"] == "node_event" and r["metadata"]["event_type"] == "join"]
+    assert code == 0
+    assert len(join_events) == 1
+    assert join_events[0]["lost_expert_bytes"] == EXPERT_STATE_BYTES
+    assert "expert_disk_io" not in [r["kind"] for r in rows]
 
 
 def test_all2allv_blocks_without_partial_traffic() -> None:
@@ -287,6 +330,7 @@ def main() -> None:
         test_join_repair_restores_node,
         test_join_repair_prefers_same_node_source,
         test_join_repair_uses_disk_when_no_live_source,
+        test_join_node_event_reports_lost_expert_bytes,
         test_all2allv_blocks_without_partial_traffic,
         test_integration_no_events,
         test_integration_node_fail_join_survives,

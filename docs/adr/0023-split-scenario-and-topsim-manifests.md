@@ -8,7 +8,7 @@ The scenario timeline manifest is the source of truth for ordering, event-only r
 
 The scenario timeline is written as the authoritative artifact. The `topsim-batch` matrix manifest is derived or rewritten from matrix-bearing timeline rows, including partial timelines after terminal failure.
 
-The `topsim-batch` matrix manifest includes only rows with a matrix path. Timeline-only rows such as `node_event`, `expert_disk_io`, and `terminal_failure` are excluded.
+The `topsim-batch` matrix manifest includes only rows with a matrix path. Timeline-only rows such as `node_event` and `terminal_failure` are excluded. Disk IO recovery is a `lost_expert_bytes` annotation on the join `node_event`, not a matrix row.
 
 Each `topsim-batch` matrix row includes `gpus_per_server` set to the scenario `ranks_per_node` value so `topsim` uses the same contiguous node/rank grouping.
 

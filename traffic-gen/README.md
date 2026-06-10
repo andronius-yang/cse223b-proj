@@ -120,7 +120,9 @@ out/mmlu_english_partial/scenarios/node1_fail_join/
 
 Scenario matrices are network-only: diagonal entries are zero. Migration and
 AllToAllV traffic are separate files linked by the same `step` in the timeline.
-Disk IO repair is recorded as timeline metadata, not as a rank-to-rank matrix.
+Disk IO repair is recorded as `lost_expert_bytes` on the join `node_event`, not
+as a rank-to-rank matrix. If any live replica exists for a missing expert,
+repair uses network migration instead of disk IO for that replica.
 The `scenario_timeline.jsonl` is the source of truth for ordering, node events,
 traffic kind, and request-progress metadata. The `topsim_matrix_manifest.jsonl`
 contains only matrix-bearing rows for current `topsim-batch` compatibility.
@@ -128,9 +130,9 @@ Each `topsim_matrix_manifest.jsonl` row sets `gpus_per_server` to the scenario
 `ranks_per_node` value.
 
 Node events appear as explicit timeline rows. A join step can therefore contain
-`node_event`, `expert_disk_io`, `expert_migration`, and `all2allv` rows with the
-same `step`. Rows with the same `step` use this phase order: `node_event`,
-`expert_disk_io`, `expert_migration`, then `all2allv`.
+`node_event`, `expert_migration`, and `all2allv` rows with the same `step`.
+Rows with the same `step` use this phase order: `node_event`,
+`expert_migration`, then `all2allv`.
 `initial_expert_replication` uses `step = -1`.
 
 Example timeline row:

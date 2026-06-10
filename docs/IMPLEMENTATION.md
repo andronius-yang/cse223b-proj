@@ -212,8 +212,9 @@ source ranks for initial expert-state replication.
 - **`build_join_repair_matrix(plans, current_slots, joined_node, live_nodes, rpn)`** (ADRs
   0008/0018/0019): on join, restore each planned slot on the rejoined node that isn't currently
   present, sourced via `choose_repair_source` (lowest live rank on the destination node,
-  else circular rank search from the destination rank). Returns `(matrix, disk_bytes)`; no live
-  source increments disk IO and still restores the planned slot.
+  else circular rank search from the destination rank). Returns `(matrix, disk_bytes)`; any live
+  source produces network repair and no disk IO for that replica. Only no live source increments
+  disk IO, and the planned slot is still restored.
 - **all2allv** (`build_all2allv_matrix`): per step, per live stream at its cursor, route each
   expert to a live replica via **`choose_route_destination`** (same-node lowest rank, else
   circular rank search from source rank), `+PAYLOAD_BYTES`; local hits dropped (network-only).
@@ -222,15 +223,15 @@ source ranks for initial expert-state replication.
 
 ### State model (key difference from a naive "node up" check)
 `current_slots: {(layer,expert): set[Slot]}` tracks *actual* live expert state. `fail` calls
-`remove_failed_node_state` (deletes the failed node's slots); `join` restores planned slots via
-network migration or disk IO. Routing reads `live_replica_ranks` from
+`remove_failed_node_state` (deletes the failed node's slots); `join` restores each missing planned
+slot via either network migration or disk IO, never both. Routing reads `live_replica_ranks` from
 `current_slots ∩ live_nodes`.
 
 ### Simulation loop (`run_scenario(config, streams, plans)`, ADRs 0001/0007/0012/0013/0019/0020/0028/0031)
 Per absolute step from 0: if no live streams remain but streams are incomplete, jump to the next
 event step (else `terminal_failure` "deadlock", return 1). Apply the step's event (fail: drop
-state + `node_event` row; join: `node_event` row, optional timeline-only `expert_disk_io` row,
-then optional `expert_migration` matrix). Then if any streams are live, build the all2allv
+state + `node_event` row; join: restore planned slots, put any disk recovery bytes on the
+`node_event` as `lost_expert_bytes`, then optional `expert_migration` matrix). Then if any streams are live, build the all2allv
 matrix; unavailable experts block their streams. If no stream can advance and no future event
 exists, emit `terminal_failure` and return 1. Emit matrices only when nonzero. Advance advancing
 streams. Returns 0 on completion.
@@ -238,10 +239,11 @@ streams. Returns 0 on completion.
 ### Outputs (`out/mmlu_english_partial/scenarios/<id>/`, ADRs 0023/0026/0031)
 - **`scenario_timeline.jsonl`** (authoritative, written incrementally with `flush`):
   `scenario_header` (with `rank_blocks`, constants), `initial_expert_replication` (step −1),
-  `node_event`, `expert_disk_io`, `expert_migration`, `all2allv`, `terminal_failure`. State
+  `node_event`, `expert_migration`, `all2allv`, `terminal_failure`. State
   fields on rows: `live_nodes`, `failed_nodes`, `failed_ranks`, `live_request_streams`,
   `paused_request_streams`, `completed_request_streams`; all2allv adds
-  `metadata.cursor_histogram` keyed **`tok{token}_layer{layer}`**.
+  `metadata.cursor_histogram` keyed **`tok{token}_layer{layer}`**. A join `node_event` can carry
+  top-level `lost_expert_bytes` when disk IO restored experts with no surviving live replica.
 - **`topsim_matrix_manifest.jsonl`** (derived, note the name — not `topsim_batch.jsonl`):
   matrix-bearing rows only, `id = "<scenario>_<matrixstem>"`, `gpus_per_server = ranks_per_node`,
   full timeline row carried under `metadata`, no policy.
@@ -286,7 +288,7 @@ streams. Returns 0 on completion.
 | 0005 locality-first routing | `choose_route_destination` |
 | 0006 contiguous node map | `rank_to_node`, `slot_rank` |
 | 0007 unavailable expert blocks stream | `build_all2allv_matrix` skips non-routable streams |
-| 0008/0018/0019 join repair | `build_join_repair_matrix`, `choose_repair_source`, `expert_disk_io` |
+| 0008/0018/0019 join repair | `build_join_repair_matrix`, `choose_repair_source`, `lost_expert_bytes` |
 | 0009 EXPERT_STATE_BYTES | constant `EXPERT_STATE_BYTES` |
 | 0011 traffic kinds | separate `*_all2allv` / `*_expert_migration` matrices |
 | 0013 completion | `all_completed`; `validate_event_completion` |
