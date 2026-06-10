@@ -22,6 +22,6 @@ The MVP `generate_scenario.py` CLI takes the scenario config path as its only ar
 
 `scenario_id` must be a filesystem-safe slug containing only letters, numbers, `_`, and `-`.
 
-Static config validation should happen before writing outputs where possible. This includes scenario id, ranks-per-node divisibility, event ordering, one event per step, node id bounds, fail/join state transitions, and capacity feasibility. Runtime failures such as unservable layer experts can still occur during generation and produce partial outputs.
+Static config validation should happen before writing outputs where possible. This includes scenario id, ranks-per-node divisibility, event ordering, one event per step, node id bounds, fail/join state transitions, and capacity feasibility. Runtime deadlocks can still occur during generation when incomplete streams cannot advance and no future event can restore progress.
 
 The MVP includes example configs at `scenarios/no_events.json` and `scenarios/node1_fail_join.json`. The no-event scenario must complete normally, and the node 1 fail-at-step-100 join-at-step-200 scenario must be a successful end-to-end generation test for this iteration.

@@ -12,4 +12,4 @@ The initial replication matrix is included in the matrix-only `topsim-batch` man
 
 Simulation step numbering starts at `0` for the first inference tick; `step = -1` is reserved for initial expert replication.
 
-The baseline owner is included as an existing replica in the planned placement target for each layer expert where possible. Initial replication creates additional remote replicas rather than replacing the baseline owner's copy.
+The baseline owner is the source of initial expert state, but it is not forced into the planned placement target. Initial replication creates every planned replica that is not already on the baseline owner rank.

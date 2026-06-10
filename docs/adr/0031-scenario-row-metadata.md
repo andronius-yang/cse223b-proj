@@ -10,7 +10,7 @@ The timeline manifest is inspectable without opening every matrix file. The `top
 
 Node events are emitted as explicit timeline rows even when the same step also contains expert migration or AllToAllV rows. This keeps the event history auditable without inferring events from placement changes.
 
-Rows with the same step use stable phase order: `initial_expert_replication` for step `-1`, then `node_event`, `expert_migration`, `all2allv`, and `terminal_failure` when applicable.
+Rows with the same step use stable phase order: `initial_expert_replication` for step `-1`, then `node_event`, `expert_disk_io`, `expert_migration`, `all2allv`, and `terminal_failure` when applicable.
 
 Matrix paths in manifests are relative to the manifest directory.
 

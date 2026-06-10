@@ -158,7 +158,8 @@ and inter-server recv ~7% at identical total bytes; survives a full server failu
 collapsed experts.
 
 **Deliberately diverges from the ADRs** (this is the prototype track, NOT to be "fixed"):
-aggregates layers (ADR 0004 wants per-layer), raw plan_layer (ADR 0029 wants baseline-pin),
+aggregates layers (ADR 0004 wants per-layer), raw plan_layer (ADR 0029 now makes Lazarus
+placement authoritative),
 even-split (ADR 0005 wants locality-first), drops failed-server requests (ADR 0001 wants
 pause), reroute-on-fail (ADR 0008/0019 want migrate-on-join), no migration traffic
 (ADR 0009/0011/0017).
@@ -170,9 +171,9 @@ pause), reroute-on-fail (ADR 0008/0019 want migrate-on-join), no migration traff
 The ADR-conformant target. **This is the team-canonical version (≈946 lines) that came in
 on master; my own earlier implementation was discarded during the rebase in favor of it.**
 A **layer-clock discrete simulation** over the 256-stream workload. Run:
-`python3 generate_scenario.py scenarios/<id>.json`. It is self-contained: it imports only
-`allocate_replicas, Placement, Slot` from `allocator.py` (NOT `mro_place`) plus `generate.py`
-helpers, and does its own placement.
+`python3 generate_scenario.py scenarios/<id>.json`. It imports the root-level Lazarus
+planner (`plan_layer`, `REPLICATION_STRATEGIES`, `Placement`, `Slot`) from `allocator.py`
+plus `generate.py` helpers. Scenario mode no longer has its own placement algorithm.
 
 ### Topology / identity
 `ranks_per_node` (default 4) ⇒ `num_nodes = 16 // ranks_per_node`. Contiguous rank-block node
@@ -198,17 +199,11 @@ tokens `1..min(32,len-1)`, MoE (non-null) layers only; `layer_loads[layer][exper
 the static oracle counts simultaneously. One work item = one layer-clock tick (≈768 total).
 `validate_event_completion` rejects events scheduled at/after the max stream length.
 
-### Planning (`baseline_pinned_place` / `build_layer_plans`, ADRs 0003/0004/0029/0030)
-Per layer: `allocate_replicas(loads, 16·cap, k_min=2)` for replica counts, then a **constructive**
-baseline-pinned placement (no post-hoc swapping):
-1. Place one replica of each expert on its **baseline owner rank** (`baseline_owner_rank` =
-   contiguous `owner_ranks`/`choose_owner_rank`) where capacity allows — this pins the owner by
-   construction and keeps the existing sharded copy as the migration source.
-2. Place the remaining replicas in ascending-replica-count order via
-   `choose_node_with_capacity` (lowest-index node with free capacity, preferring a node the
-   expert doesn't already occupy) + `choose_rank_on_node` (least-loaded rank on that node).
-This guarantees distinct-node placement for survival and fills all `16·cap` slots. (Because it
-pins first and only then fills, it sidesteps the node-diversity hazard my swap-based pin had.)
+### Planning (`build_layer_plans`, ADRs 0003/0004/0029/0030)
+Per layer: call `allocator.plan_layer(loads, num_nodes, ranks_per_node, capacity=cap,
+k_min=2, strategy=replication_strategy)`. The returned `Placement` is the sole planned
+placement truth. Baseline owners are no longer pinned into the placement; they are only the
+source ranks for initial expert-state replication.
 
 ### Traffic kinds (network-only, diagonal zeroed — ADRs 0011/0025)
 - **`build_initial_replication_matrix(plans, rpn)`** (ADR 0017, step −1): one aggregated matrix;
@@ -216,31 +211,35 @@ pins first and only then fills, it sidesteps the node-diversity hazard my swap-b
   planned replica rank (self-copy free).
 - **`build_join_repair_matrix(plans, current_slots, joined_node, live_nodes, rpn)`** (ADRs
   0008/0018/0019): on join, restore each planned slot on the rejoined node that isn't currently
-  present, sourced via `choose_repair_source` (a live replica, preferring one already on the dst
-  node, else the lowest `(rank, slot)`). Returns `(matrix, reason|None)`; a `None` source ⇒
-  terminal failure.
+  present, sourced via `choose_repair_source` (lowest live rank on the destination node,
+  else circular rank search from the destination rank). Returns `(matrix, disk_bytes)`; no live
+  source increments disk IO and still restores the planned slot.
 - **all2allv** (`build_all2allv_matrix`): per step, per live stream at its cursor, route each
-  expert to a live replica via **`choose_route_destination`** (locality-first, ADR 0005: source
-  rank → same node → lowest remote), `+PAYLOAD_BYTES`; local hits dropped (network-only). Also
-  returns the cursor histogram and the streams that advanced.
+  expert to a live replica via **`choose_route_destination`** (same-node lowest rank, else
+  circular rank search from source rank), `+PAYLOAD_BYTES`; local hits dropped (network-only).
+  If any expert for a stream has no live replica, that stream blocks for the tick and emits no
+  partial traffic. The function returns the cursor histogram and the streams that advanced.
 
 ### State model (key difference from a naive "node up" check)
 `current_slots: {(layer,expert): set[Slot]}` tracks *actual* live expert state. `fail` calls
 `remove_failed_node_state` (deletes the failed node's slots); `join` restores planned slots via
-the migration matrix. Routing reads `live_replica_ranks` from `current_slots ∩ live_nodes`.
+network migration or disk IO. Routing reads `live_replica_ranks` from
+`current_slots ∩ live_nodes`.
 
 ### Simulation loop (`run_scenario(config, streams, plans)`, ADRs 0001/0007/0012/0013/0019/0020/0028/0031)
 Per absolute step from 0: if no live streams remain but streams are incomplete, jump to the next
 event step (else `terminal_failure` "deadlock", return 1). Apply the step's event (fail: drop
-state + `node_event` row; join: `node_event` row then emit `expert_migration` matrix). Then if
-any streams are live, build the all2allv matrix; an unservable expert ⇒ `terminal_failure`
-(return 1). Emit matrices only when nonzero. Advance advancing streams. Returns 0 on completion.
+state + `node_event` row; join: `node_event` row, optional timeline-only `expert_disk_io` row,
+then optional `expert_migration` matrix). Then if any streams are live, build the all2allv
+matrix; unavailable experts block their streams. If no stream can advance and no future event
+exists, emit `terminal_failure` and return 1. Emit matrices only when nonzero. Advance advancing
+streams. Returns 0 on completion.
 
 ### Outputs (`out/mmlu_english_partial/scenarios/<id>/`, ADRs 0023/0026/0031)
 - **`scenario_timeline.jsonl`** (authoritative, written incrementally with `flush`):
   `scenario_header` (with `rank_blocks`, constants), `initial_expert_replication` (step −1),
-  `node_event`, `expert_migration`, `all2allv`, `terminal_failure`. State fields on rows:
-  `live_nodes`, `failed_nodes`, `failed_ranks`, `live_request_streams`,
+  `node_event`, `expert_disk_io`, `expert_migration`, `all2allv`, `terminal_failure`. State
+  fields on rows: `live_nodes`, `failed_nodes`, `failed_ranks`, `live_request_streams`,
   `paused_request_streams`, `completed_request_streams`; all2allv adds
   `metadata.cursor_histogram` keyed **`tok{token}_layer{layer}`**.
 - **`topsim_matrix_manifest.jsonl`** (derived, note the name — not `topsim_batch.jsonl`):
@@ -249,7 +248,7 @@ any streams are live, build the all2allv matrix; an unservable expert ⇒ `termi
 - Matrix files: `initial_expert_replication.txt`, `step_{NNNNNN}_{all2allv|expert_migration}.txt`.
   Whitespace integer N×N (`generate.new_matrix`/`write_matrix`).
 
-### Verified behavior (`scenario_tests.py`, 15 tests, rewritten against this API)
+### Verified behavior (`scenario_tests.py`, 18 tests, rewritten against this API)
 - `no_events`: exit 0, 768 all2allv matrices, lockstep.
 - `node1_fail_join` (fail@100 / join@200): exit 0, **survives**, 868 all2allv steps (768 + 100
   paused), 2 node_events + 1 migration; during failure `failed_nodes == [1]` and 64 streams paused.
@@ -265,11 +264,9 @@ any streams are live, build the all2allv matrix; an unservable expert ⇒ `termi
    scenario config to get load-adaptive replica counts. **Corollary:** at cap=16 the `adaptive`
    and `uniform` strategies are *identical* (both flat 2); the two only diverge once there's
    headroom (e.g. cap=32 → adaptive concentrates on hot experts, uniform stays flat 4).
-2. **Two `generate_scenario.py` implementations existed; the group's won.** My earlier version
-   (post-process swap pinning; functions `plan_placements`/`pin_baseline_owners`/`choose_replica`/
-   `migration_matrix`/`run_scenario(config)`; output `topsim_batch.jsonl`; cursor keys `token:layer`)
-   was discarded in the rebase. The canonical one (§6) pins **constructively** (owner first, then
-   fill), so the "same-node-swap" pin hazard I hit doesn't apply to it. Don't reintroduce my API.
+2. **Baseline pinning is intentionally gone.** The canonical scenario planner now trusts
+   `allocator.plan_layer` for placement truth. Keep baseline owners only as initial replication
+   sources unless a future ADR explicitly changes the placement contract again.
 3. **Output volume**: a full scenario writes ~768+ matrix files. Tests redirect
    `gs.SCENARIO_ROOT` to a temp dir to avoid polluting `out/`.
 4. **toposim not run here**: `uv` and some deps (networkx) aren't installed in this env.
@@ -288,8 +285,8 @@ any streams are live, build the all2allv matrix; an unservable expert ⇒ `termi
 | 0004 per-layer placement | `build_layer_plans` loops per layer |
 | 0005 locality-first routing | `choose_route_destination` |
 | 0006 contiguous node map | `rank_to_node`, `slot_rank` |
-| 0007 unservable→terminal | `build_all2allv_matrix` returns terminal reason |
-| 0008/0018/0019 join repair | `build_join_repair_matrix`, `choose_repair_source` |
+| 0007 unavailable expert blocks stream | `build_all2allv_matrix` skips non-routable streams |
+| 0008/0018/0019 join repair | `build_join_repair_matrix`, `choose_repair_source`, `expert_disk_io` |
 | 0009 EXPERT_STATE_BYTES | constant `EXPERT_STATE_BYTES` |
 | 0011 traffic kinds | separate `*_all2allv` / `*_expert_migration` matrices |
 | 0013 completion | `all_completed`; `validate_event_completion` |
@@ -299,10 +296,10 @@ any streams are live, build the all2allv matrix; an unservable expert ⇒ `termi
 | 0022 JSON config | `load_config` |
 | 0023 dual manifests | `scenario_timeline.jsonl` + `topsim_matrix_manifest.jsonl` |
 | 0025 network-only | diagonal dropped on emit |
-| 0026 partial on terminal | incremental `write_jsonl` + `write_terminal_failure`, exit 1 |
+| 0026 partial on terminal | no-progress deadlock uses `write_terminal_failure`, exit 1 |
 | 0027 stream identity | `RequestStream(source_rank, local_request_index)` |
 | 0028 cursor histogram | `metadata.cursor_histogram`, keys `tok{t}_layer{l}` |
-| 0029 baseline-pin | `baseline_pinned_place` (constructive) |
+| 0029 Lazarus placement truth | `build_layer_plans` calls `allocator.plan_layer` |
 | 0030 per-layer capacity | `capacity_per_rank_per_layer`, `K_MIN=2` |
 | 0031 row metadata | `state_fields`, `emit_matrix_row` |
 

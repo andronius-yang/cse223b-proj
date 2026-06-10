@@ -1,6 +1,6 @@
 # Partial Outputs on Terminal Scenario Failure
 
-When a failure-aware scenario reaches an unservable layer expert or another terminal invalid state, the MVP keeps outputs generated before the failure and records a terminal failure row in the scenario timeline manifest. It does not emit an inference matrix for the failed step.
+When a failure-aware scenario reaches a no-progress state with no future event that can restore progress, the MVP keeps outputs generated before the failure and records a terminal failure row in the scenario timeline manifest. It does not emit an inference matrix for the failed step.
 
 **Consequences**
 

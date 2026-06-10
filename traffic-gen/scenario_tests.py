@@ -116,22 +116,27 @@ def test_topology_helpers() -> None:
 def test_choose_route_destination_locality() -> None:
     assert gs.choose_route_destination(2, [2, 8, 9], 4) == 2          # local hit
     assert gs.choose_route_destination(0, [2, 3, 8], 4) == 2          # same node, lowest
-    assert gs.choose_route_destination(0, [8, 9, 13], 4) == 8         # lowest remote
+    assert gs.choose_route_destination(5, [0, 2, 9], 4) == 9          # circular remote
+    assert gs.choose_route_destination(14, [1, 5, 9], 4) == 1         # circular wrap
+    assert gs.choose_route_destination(0, [], 4) is None
 
 
 # --------------------------------------------------------------------------- #
-# baseline-pinned placement
+# Lazarus placement
 # --------------------------------------------------------------------------- #
-def test_baseline_pinned_place() -> None:
+def test_build_layer_plans_uses_lazarus_placement() -> None:
     loads = [1.0] * gs.generate.NUM_EXPERTS  # uniform -> every expert exactly k_min=2
-    placement = gs.baseline_pinned_place(layer_id=7, expert_loads=loads,
-                                         ranks_per_node=4, capacity_per_rank=16)
+    config = ScenarioConfig("placement", 4, 16, "adaptive", [])
+    placement = gs.build_layer_plans({7: loads}, config)[7].placement
+    _, expected = gs.plan_layer(loads, 4, 4, capacity=16, k_min=gs.K_MIN, strategy="adaptive")
+    assert placement.expert_to_slots == expected.expert_to_slots
+    assert placement.slot_to_expert == expected.slot_to_expert
     for expert in range(gs.generate.NUM_EXPERTS):
         slots = placement.expert_to_slots[expert]
-        ranks = {gs.slot_rank(s, 4) for s in slots}
         nodes = {s.node for s in slots}
-        assert gs.baseline_owner_rank(7, expert) in ranks, f"expert {expert} owner not pinned"
         assert len(slots) == 2 and len(nodes) == 2, f"expert {expert} not on 2 distinct nodes"
+    ranks = {gs.slot_rank(s, 4) for s in placement.expert_to_slots[8]}
+    assert gs.baseline_owner_rank(7, 8) not in ranks
     # every single-node failure leaves a live replica for every expert
     for node in range(4):
         for expert in range(gs.generate.NUM_EXPERTS):
@@ -164,12 +169,53 @@ def test_join_repair_restores_node() -> None:
     plans = _single_expert_plan()
     current = gs.initial_current_slots(plans)
     gs.remove_failed_node_state(current, node=1)   # node 1 fails -> rank-4 replica lost
-    m, reason = gs.build_join_repair_matrix(
+    m, disk_bytes = gs.build_join_repair_matrix(
         plans=plans, current_slots=current, joined_node=1,
         live_nodes={0, 1, 2, 3}, ranks_per_node=4)
-    assert reason is None
+    assert disk_bytes == 0
     assert m[0][4] == EXPERT_STATE_BYTES           # restored from live source rank 0
     assert gs.total_bytes(m) == EXPERT_STATE_BYTES
+
+
+def test_join_repair_prefers_same_node_source() -> None:
+    src = Slot(node=1, local_rank=2, slot=0)        # rank 6
+    dst = Slot(node=1, local_rank=0, slot=0)        # rank 4
+    expert_to_slots = {e: [] for e in range(gs.generate.NUM_EXPERTS)}
+    expert_to_slots[5] = [dst, src]
+    plans = {7: LayerPlan(7, Placement(expert_to_slots, {dst: 5, src: 5}))}
+    current = {(7, 5): {src}}
+    m, disk_bytes = gs.build_join_repair_matrix(
+        plans=plans, current_slots=current, joined_node=1,
+        live_nodes={1}, ranks_per_node=4)
+    assert disk_bytes == 0
+    assert m[6][4] == EXPERT_STATE_BYTES
+    assert dst in current[(7, 5)]
+
+
+def test_join_repair_uses_disk_when_no_live_source() -> None:
+    plans = _single_expert_plan()
+    current: dict[tuple[int, int], set[Slot]] = {}
+    m, disk_bytes = gs.build_join_repair_matrix(
+        plans=plans, current_slots=current, joined_node=1,
+        live_nodes={1}, ranks_per_node=4)
+    assert disk_bytes == EXPERT_STATE_BYTES
+    assert gs.total_bytes(m) == 0
+    assert Slot(node=1, local_rank=0, slot=0) in current[(7, 5)]
+
+
+def test_all2allv_blocks_without_partial_traffic() -> None:
+    stream = gs.RequestStream(
+        source_rank=0,
+        local_request_index=0,
+        path=Path("trace.json"),
+        work=[gs.WorkItem(token_index=1, layer_id=7, expert_ids=(5, 6))],
+    )
+    current = {(7, 5): {Slot(node=1, local_rank=0, slot=0)}, (7, 6): set()}
+    m, histogram, advancing = gs.build_all2allv_matrix(
+        streams=[stream], current_slots=current, live_nodes={0, 1}, ranks_per_node=4)
+    assert gs.total_bytes(m) == 0
+    assert histogram == {}
+    assert advancing == []
 
 
 # --------------------------------------------------------------------------- #
@@ -236,9 +282,12 @@ def main() -> None:
         test_config_rejects_bad_node_and_slug,
         test_topology_helpers,
         test_choose_route_destination_locality,
-        test_baseline_pinned_place,
+        test_build_layer_plans_uses_lazarus_placement,
         test_initial_replication_sources_from_owner,
         test_join_repair_restores_node,
+        test_join_repair_prefers_same_node_source,
+        test_join_repair_uses_disk_when_no_live_source,
+        test_all2allv_blocks_without_partial_traffic,
         test_integration_no_events,
         test_integration_node_fail_join_survives,
         test_integration_terminal_failure,
