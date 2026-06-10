@@ -49,7 +49,7 @@ class ScenarioConfig:
 class NodeEvent:
     step: int
     event_type: str
-    node: int
+    ranks: tuple[int, ...]
 
 
 @dataclass(frozen=True)
@@ -97,6 +97,30 @@ def require_int(value: Any, name: str) -> int:
     return value
 
 
+def require_rank_list(value: Any, name: str) -> tuple[int, ...]:
+    if not isinstance(value, list):
+        fail(f"{name} must be a list of rank ids")
+    if not value:
+        fail(f"{name} must not be empty")
+
+    ranks: list[int] = []
+    seen: set[int] = set()
+    for index, rank in enumerate(value):
+        if not isinstance(rank, int) or isinstance(rank, bool):
+            fail(f"{name}[{index}] must be an integer")
+        if rank < 0 or rank >= generate.NUM_RANKS:
+            fail(
+                f"{name}[{index}] {rank} is outside "
+                f"0..{generate.NUM_RANKS - 1}"
+            )
+        if rank in seen:
+            fail(f"{name} contains duplicate rank {rank}")
+        seen.add(rank)
+        ranks.append(rank)
+
+    return tuple(ranks)
+
+
 def load_config(path: Path) -> ScenarioConfig:
     data = load_json(path)
     if not isinstance(data, dict):
@@ -133,7 +157,6 @@ def load_config(path: Path) -> ScenarioConfig:
             f"ranks_per_node={ranks_per_node}"
         )
 
-    num_nodes = generate.NUM_RANKS // ranks_per_node
     if generate.NUM_RANKS * capacity < generate.NUM_EXPERTS * K_MIN:
         fail(
             "capacity_per_rank_per_layer is too small for "
@@ -147,38 +170,44 @@ def load_config(path: Path) -> ScenarioConfig:
     events: list[NodeEvent] = []
     seen_steps: set[int] = set()
     previous_step = -1
-    live_nodes = set(range(num_nodes))
+    failed_ranks_set: set[int] = set()
     for index, raw_event in enumerate(raw_events):
         if not isinstance(raw_event, dict):
             fail(f"events[{index}] must be a JSON object")
 
         step = require_int(raw_event.get("step"), f"events[{index}].step")
         event_type = raw_event.get("type")
-        node = require_int(raw_event.get("node"), f"events[{index}].node")
+        ranks = require_rank_list(raw_event.get("ranks"), f"events[{index}].ranks")
 
         if step < 0:
             fail(f"events[{index}].step must be non-negative")
         if step <= previous_step:
             fail("events must be ordered by strictly increasing step")
         if step in seen_steps:
-            fail(f"at most one node event is allowed at step {step}")
+            fail(f"at most one rank event is allowed at step {step}")
         if event_type not in {"fail", "join"}:
             fail(f"events[{index}].type must be 'fail' or 'join'")
-        if node < 0 or node >= num_nodes:
-            fail(f"events[{index}].node {node} is outside 0..{num_nodes - 1}")
 
         if event_type == "fail":
-            if node not in live_nodes:
-                fail(f"events[{index}] tries to fail already-failed node {node}")
-            live_nodes.remove(node)
+            already_failed = sorted(set(ranks) & failed_ranks_set)
+            if already_failed:
+                fail(
+                    f"events[{index}] tries to fail already-failed ranks "
+                    f"{already_failed}"
+                )
+            failed_ranks_set.update(ranks)
         else:
-            if node in live_nodes:
-                fail(f"events[{index}] tries to join already-live node {node}")
-            live_nodes.add(node)
+            already_live = sorted(rank for rank in ranks if rank not in failed_ranks_set)
+            if already_live:
+                fail(
+                    f"events[{index}] tries to join already-live ranks "
+                    f"{already_live}"
+                )
+            failed_ranks_set.difference_update(ranks)
 
         seen_steps.add(step)
         previous_step = step
-        events.append(NodeEvent(step=step, event_type=event_type, node=node))
+        events.append(NodeEvent(step=step, event_type=event_type, ranks=ranks))
 
     return ScenarioConfig(
         scenario_id=scenario_id,
@@ -325,18 +354,34 @@ def total_bytes(matrix: Matrix) -> int:
     return sum(sum(row) for row in matrix)
 
 
-def failed_ranks(failed_nodes: set[int], ranks_per_node: int) -> list[int]:
-    ranks: list[int] = []
-    for node in sorted(failed_nodes):
-        start = node * ranks_per_node
-        ranks.extend(range(start, start + ranks_per_node))
-    return ranks
+def node_rank_ids(node: int, ranks_per_node: int) -> range:
+    start = node * ranks_per_node
+    return range(start, start + ranks_per_node)
+
+
+def live_node_ids(failed_ranks_set: set[int], ranks_per_node: int) -> list[int]:
+    nodes: list[int] = []
+    for node in range(generate.NUM_RANKS // ranks_per_node):
+        if any(rank not in failed_ranks_set for rank in node_rank_ids(node, ranks_per_node)):
+            nodes.append(node)
+    return nodes
+
+
+def failed_node_ids(failed_ranks_set: set[int], ranks_per_node: int) -> list[int]:
+    nodes: list[int] = []
+    for node in range(generate.NUM_RANKS // ranks_per_node):
+        if all(rank in failed_ranks_set for rank in node_rank_ids(node, ranks_per_node)):
+            nodes.append(node)
+    return nodes
+
+
+def failed_ranks(failed_ranks_set: set[int]) -> list[int]:
+    return sorted(failed_ranks_set)
 
 
 def request_counts(
     streams: list[RequestStream],
-    failed_nodes: set[int],
-    ranks_per_node: int,
+    failed_ranks_set: set[int],
 ) -> dict[str, int]:
     live = 0
     paused = 0
@@ -344,7 +389,7 @@ def request_counts(
     for stream in streams:
         if stream.completed():
             completed += 1
-        elif rank_to_node(stream.source_rank, ranks_per_node) in failed_nodes:
+        elif stream.source_rank in failed_ranks_set:
             paused += 1
         else:
             live += 1
@@ -357,16 +402,15 @@ def request_counts(
 
 def state_fields(
     streams: list[RequestStream],
-    live_nodes: set[int],
-    failed_nodes_set: set[int],
+    failed_ranks_set: set[int],
     ranks_per_node: int,
 ) -> dict[str, Any]:
     fields: dict[str, Any] = {
-        "live_nodes": sorted(live_nodes),
-        "failed_nodes": sorted(failed_nodes_set),
-        "failed_ranks": failed_ranks(failed_nodes_set, ranks_per_node),
+        "live_nodes": live_node_ids(failed_ranks_set, ranks_per_node),
+        "failed_nodes": failed_node_ids(failed_ranks_set, ranks_per_node),
+        "failed_ranks": failed_ranks(failed_ranks_set),
     }
-    fields.update(request_counts(streams, failed_nodes_set, ranks_per_node))
+    fields.update(request_counts(streams, failed_ranks_set))
     return fields
 
 
@@ -451,23 +495,30 @@ def build_initial_replication_matrix(
     return matrix
 
 
-def remove_failed_node_state(
+def remove_failed_rank_state(
     current_slots: dict[ExpertKey, set[Slot]],
-    node: int,
+    failed_rank_ids: set[int],
+    ranks_per_node: int,
 ) -> None:
     for key, slots in list(current_slots.items()):
-        current_slots[key] = {slot for slot in slots if slot.node != node}
+        current_slots[key] = {
+            slot
+            for slot in slots
+            if slot_rank(slot, ranks_per_node) not in failed_rank_ids
+        }
 
 
 def choose_repair_source(
     current_slots: dict[ExpertKey, set[Slot]],
     key: ExpertKey,
     dst_slot: Slot,
-    live_nodes: set[int],
+    failed_ranks_set: set[int],
     ranks_per_node: int,
 ) -> Slot | None:
     candidates = [
-        slot for slot in current_slots.get(key, set()) if slot.node in live_nodes
+        slot
+        for slot in current_slots.get(key, set())
+        if slot_rank(slot, ranks_per_node) not in failed_ranks_set
     ]
     if not candidates:
         return None
@@ -489,8 +540,8 @@ def choose_repair_source(
 def build_join_repair_matrix(
     plans: dict[int, LayerPlan],
     current_slots: dict[ExpertKey, set[Slot]],
-    joined_node: int,
-    live_nodes: set[int],
+    joined_ranks: set[int],
+    failed_ranks_set: set[int],
     ranks_per_node: int,
 ) -> tuple[Matrix, int]:
     matrix = generate.new_matrix()
@@ -502,7 +553,7 @@ def build_join_repair_matrix(
             planned_slots = [
                 slot
                 for slot in plan.placement.expert_to_slots[expert_id]
-                if slot.node == joined_node
+                if slot_rank(slot, ranks_per_node) in joined_ranks
             ]
             for dst_slot in planned_slots:
                 if dst_slot in current_slots.get(key, set()):
@@ -511,7 +562,7 @@ def build_join_repair_matrix(
                     current_slots=current_slots,
                     key=key,
                     dst_slot=dst_slot,
-                    live_nodes=live_nodes,
+                    failed_ranks_set=failed_ranks_set,
                     ranks_per_node=ranks_per_node,
                 )
                 if src_slot is None:
@@ -528,13 +579,13 @@ def build_join_repair_matrix(
 def live_replica_ranks(
     current_slots: dict[ExpertKey, set[Slot]],
     key: ExpertKey,
-    live_nodes: set[int],
+    failed_ranks_set: set[int],
     ranks_per_node: int,
 ) -> list[int]:
     ranks = {
         slot_rank(slot, ranks_per_node)
         for slot in current_slots.get(key, set())
-        if slot.node in live_nodes
+        if slot_rank(slot, ranks_per_node) not in failed_ranks_set
     }
     return sorted(ranks)
 
@@ -566,7 +617,7 @@ def choose_route_destination(
 def build_all2allv_matrix(
     streams: list[RequestStream],
     current_slots: dict[ExpertKey, set[Slot]],
-    live_nodes: set[int],
+    failed_ranks_set: set[int],
     ranks_per_node: int,
 ) -> tuple[Matrix, dict[str, int], list[RequestStream]]:
     matrix = generate.new_matrix()
@@ -576,7 +627,7 @@ def build_all2allv_matrix(
     for stream in streams:
         if stream.completed():
             continue
-        if rank_to_node(stream.source_rank, ranks_per_node) not in live_nodes:
+        if stream.source_rank in failed_ranks_set:
             continue
 
         item = stream.work[stream.cursor]
@@ -587,7 +638,7 @@ def build_all2allv_matrix(
             replicas = live_replica_ranks(
                 current_slots=current_slots,
                 key=key,
-                live_nodes=live_nodes,
+                failed_ranks_set=failed_ranks_set,
                 ranks_per_node=ranks_per_node,
             )
             dst_rank = choose_route_destination(
@@ -622,14 +673,13 @@ def write_terminal_failure(
     step: int,
     reason: dict[str, Any],
     streams: list[RequestStream],
-    live_nodes: set[int],
-    failed_nodes_set: set[int],
+    failed_ranks_set: set[int],
     ranks_per_node: int,
 ) -> None:
     row = {
         "step": step,
         "kind": "terminal_failure",
-        **state_fields(streams, live_nodes, failed_nodes_set, ranks_per_node),
+        **state_fields(streams, failed_ranks_set, ranks_per_node),
         "metadata": reason,
     }
     write_jsonl(timeline_handle, row)
@@ -639,8 +689,7 @@ def run_scenario(config: ScenarioConfig, streams: list[RequestStream], plans: di
     output_dir = SCENARIO_ROOT / config.scenario_id
     prepare_output_dir(output_dir)
 
-    live_nodes = set(range(generate.NUM_RANKS // config.ranks_per_node))
-    failed_nodes_set: set[int] = set()
+    failed_ranks_set: set[int] = set()
     current_slots = initial_current_slots(plans)
     events = config.events
     event_index = 0
@@ -698,15 +747,13 @@ def run_scenario(config: ScenarioConfig, streams: list[RequestStream], plans: di
                     "matrix": initial_matrix_path.name,
                     "total_bytes": total_bytes(initial_matrix),
                     **state_fields(
-                        streams, live_nodes, failed_nodes_set, config.ranks_per_node
+                        streams, failed_ranks_set, config.ranks_per_node
                     ),
                 },
             )
 
             while not all_completed(streams):
-                if not request_counts(
-                    streams, failed_nodes_set, config.ranks_per_node
-                )["live_request_streams"]:
+                if not request_counts(streams, failed_ranks_set)["live_request_streams"]:
                     if event_index < len(events):
                         step = max(step, events[event_index].step)
                     else:
@@ -715,8 +762,7 @@ def run_scenario(config: ScenarioConfig, streams: list[RequestStream], plans: di
                             step=step,
                             reason={"reason": "deadlock_all_incomplete_streams_paused"},
                             streams=streams,
-                            live_nodes=live_nodes,
-                            failed_nodes_set=failed_nodes_set,
+                            failed_ranks_set=failed_ranks_set,
                             ranks_per_node=config.ranks_per_node,
                         )
                         return 1
@@ -726,17 +772,19 @@ def run_scenario(config: ScenarioConfig, streams: list[RequestStream], plans: di
                     migration_matrix = None
                     disk_bytes = 0
                     if event.event_type == "fail":
-                        live_nodes.remove(event.node)
-                        failed_nodes_set.add(event.node)
-                        remove_failed_node_state(current_slots, event.node)
+                        event_ranks = set(event.ranks)
+                        failed_ranks_set.update(event_ranks)
+                        remove_failed_rank_state(
+                            current_slots, event_ranks, config.ranks_per_node
+                        )
                     else:
-                        live_nodes.add(event.node)
-                        failed_nodes_set.remove(event.node)
+                        event_ranks = set(event.ranks)
+                        failed_ranks_set.difference_update(event_ranks)
                         migration_matrix, disk_bytes = build_join_repair_matrix(
                             plans=plans,
                             current_slots=current_slots,
-                            joined_node=event.node,
-                            live_nodes=live_nodes,
+                            joined_ranks=event_ranks,
+                            failed_ranks_set=failed_ranks_set,
                             ranks_per_node=config.ranks_per_node,
                         )
 
@@ -745,13 +793,12 @@ def run_scenario(config: ScenarioConfig, streams: list[RequestStream], plans: di
                         "kind": "node_event",
                         **state_fields(
                             streams,
-                            live_nodes,
-                            failed_nodes_set,
+                            failed_ranks_set,
                             config.ranks_per_node,
                         ),
                         "metadata": {
                             "event_type": event.event_type,
-                            "node": event.node,
+                            "ranks": list(event.ranks),
                         },
                     }
                     if disk_bytes:
@@ -778,21 +825,18 @@ def run_scenario(config: ScenarioConfig, streams: list[RequestStream], plans: di
                                     "total_bytes": migration_bytes,
                                     **state_fields(
                                         streams,
-                                        live_nodes,
-                                        failed_nodes_set,
+                                        failed_ranks_set,
                                         config.ranks_per_node,
                                     ),
                                 },
                             )
 
-                counts_before = request_counts(
-                    streams, failed_nodes_set, config.ranks_per_node
-                )
+                counts_before = request_counts(streams, failed_ranks_set)
                 if counts_before["live_request_streams"]:
                     matrix, histogram, advancing = build_all2allv_matrix(
                         streams=streams,
                         current_slots=current_slots,
-                        live_nodes=live_nodes,
+                        failed_ranks_set=failed_ranks_set,
                         ranks_per_node=config.ranks_per_node,
                     )
                     if not advancing:
@@ -804,8 +848,7 @@ def run_scenario(config: ScenarioConfig, streams: list[RequestStream], plans: di
                             step=step,
                             reason={"reason": "deadlock_all_live_streams_blocked"},
                             streams=streams,
-                            live_nodes=live_nodes,
-                            failed_nodes_set=failed_nodes_set,
+                            failed_ranks_set=failed_ranks_set,
                             ranks_per_node=config.ranks_per_node,
                         )
                         return 1
@@ -822,10 +865,10 @@ def run_scenario(config: ScenarioConfig, streams: list[RequestStream], plans: di
                             "kind": "all2allv",
                             "matrix": matrix_path.name,
                             "total_bytes": total_bytes(matrix),
-                            "live_nodes": sorted(live_nodes),
-                            "failed_nodes": sorted(failed_nodes_set),
-                            "failed_ranks": failed_ranks(
-                                failed_nodes_set, config.ranks_per_node
+                            **state_fields(
+                                streams,
+                                failed_ranks_set,
+                                config.ranks_per_node,
                             ),
                             **counts_before,
                             "metadata": {"cursor_histogram": histogram},
