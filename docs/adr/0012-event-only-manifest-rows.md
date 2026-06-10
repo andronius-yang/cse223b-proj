@@ -1,6 +1,6 @@
 # Event-Only Manifest Rows
 
-The MVP records simulation steps with node events in the scenario manifest even when they emit no traffic matrix. Empty all-zero matrices are not written; event-only rows preserve the failure/join timeline without adding noise to `topsim` inputs.
+The MVP records simulation steps with fail/join events in the scenario manifest even when they emit no traffic matrix. Empty all-zero matrices are not written; event-only rows preserve the failure/join timeline without adding noise to `topsim` inputs.
 
 **Consequences**
 

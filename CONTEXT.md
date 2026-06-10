@@ -9,15 +9,15 @@ The MVP workload composed of all locally available English MMLU subject traces f
 _Avoid_: Single-subject workload, full MMLU workload
 
 **Simulation Step**:
-A token/layer coordinate in the decode pass at which traffic demand and failure-aware placement state are observed. Node events scheduled for a simulation step are effective before that step's inference traffic.
+A token/layer coordinate in the decode pass at which traffic demand and failure-aware placement state are observed. Rank events scheduled for a simulation step are effective before that step's inference traffic.
 _Avoid_: Layer-only step, post-layer event
 
-**Node Join Event**:
-A failed node becoming available again as empty compute and storage capacity. Its previous expert replicas are not assumed to survive; experts become available on the joined node only after migration.
+**Rank Join Event**:
+One or more failed ranks becoming available again as empty compute and storage capacity. Their previous expert replicas are not assumed to survive; experts become available on joined ranks only after repair.
 _Avoid_: State-preserving recovery, replica restore
 
 **Paused Request Stream**:
-A request stream whose rank is unavailable and whose token/layer progress does not advance until that rank rejoins. Its request execution state is assumed recoverable; expert state on the failed node is not.
+A request stream whose token/layer progress does not advance because its source rank is unavailable. Its request execution state is assumed recoverable; expert state on failed ranks is not.
 _Avoid_: Terminated request, dropped request, globally lockstepped request
 
 **Request Stream**:
@@ -29,7 +29,7 @@ A compact manifest summary of how many request streams contributed traffic from 
 _Avoid_: Full request cursor dump, hidden progress drift
 
 **Expert State**:
-The model expert weights resident on a rank for serving routed MoE tokens. Expert state on a failed node is treated as lost and must be recreated through expert migration after the node rejoins.
+The model expert weights resident on a rank for serving routed MoE tokens. Expert state on a failed rank is treated as lost and must be recreated through repair after the rank rejoins.
 _Avoid_: Request state, KV cache, restored replica
 
 **Expert State Bytes**:
@@ -53,7 +53,7 @@ The live replica chosen as the source for recreating a missing layer expert repl
 _Avoid_: Oracle migration source, random repair source
 
 **Initial Expert Replication**:
-The startup movement of expert state from baseline expert owners to the planned placement target before inference begins. It is emitted as a special traffic matrix and is distinct from repair migration after node events.
+The startup movement of expert state from baseline expert owners to the planned placement target before inference begins. It is emitted as a special traffic matrix and is distinct from repair migration after rank events.
 _Avoid_: Free initial placement, failure repair migration, synthetic bootstrap source
 
 **Baseline Expert Owner**:
@@ -73,7 +73,7 @@ A failure-aware scenario matrix whose diagonal entries are zero because local mo
 _Avoid_: Original scenario matrix, local-hit matrix
 
 **Event-Only Step**:
-A simulation step where a node event occurs but no traffic matrix is emitted. It is represented in the scenario manifest so the failure/join timeline remains auditable without creating empty matrices.
+A simulation step where a rank event occurs but no traffic matrix is emitted. It is represented in the scenario manifest so the failure/join timeline remains auditable without creating empty matrices.
 _Avoid_: Empty traffic matrix, invisible event
 
 **Scenario Completion**:
@@ -85,11 +85,11 @@ A separate traffic-generation mode that emits simulation-step matrices, event me
 _Avoid_: Replacement baseline output, aggregate layer scenario
 
 **Scenario Config**:
-The JSON input that names a failure-aware scenario and provides ranks-per-node plus its node event schedule. It is the MVP control surface for failure-aware generation.
+The JSON input that names a failure-aware scenario and provides ranks-per-node plus its rank event schedule. It is the MVP control surface for failure-aware generation.
 _Avoid_: Event CLI flags, ad hoc schedule arguments
 
 **Scenario Timeline Manifest**:
-The complete JSONL output for a failure-aware scenario, including ordered simulation steps, node events, traffic kinds, and event-only rows. It is the source of truth for scenario ordering.
+The complete JSONL output for a failure-aware scenario, including ordered simulation steps, rank events, traffic kinds, and event-only rows. It is the source of truth for scenario ordering.
 _Avoid_: Topsim batch manifest, unordered matrix list
 
 **Topsim Matrix Manifest**:
@@ -116,13 +116,13 @@ _Avoid_: Oracle load balancing, globally least-loaded routing
 The mapping where node membership is defined by contiguous blocks of ranks. The ranks-per-node value is scenario input and must divide the total rank count; `traffic-gen` and `topsim` must use the same value for a scenario.
 _Avoid_: Round-robin node mapping, inferred topology mismatch
 
-**Node Event Schedule**:
-The scenario input that identifies node fail and join events by simulation step and node id. Rank effects are derived from the rank block node mapping.
-_Avoid_: Rank failure schedule, mixed node/rank event ids
+**Rank Event Schedule**:
+The scenario input that identifies fail and join events by simulation step and explicit rank list. A full-node failure is represented by listing every rank in that node's contiguous rank block.
+_Avoid_: Node id schedule, mixed node/rank event ids
 
-**Single Node Event Step**:
-An MVP schedule constraint where at most one node fail or join event occurs at a simulation step. Simultaneous node events are outside the MVP.
-_Avoid_: Simultaneous node events, batched failure events
+**Single Rank Event Step**:
+An MVP schedule constraint where at most one fail or join event occurs at a simulation step. One event may target one rank or a rank block, but simultaneous independent events are outside the MVP.
+_Avoid_: Simultaneous independent events, node-id-only event step
 
 **Unservable Layer Expert**:
 A layer expert needed by inference for which no live replica exists. The scenario is invalid because traffic generation cannot route to or migrate from lost expert state.
@@ -145,11 +145,11 @@ The number of layer-expert replica slots available on each rank for a single MoE
 _Avoid_: Cross-layer memory capacity, total model capacity
 
 **Join Repair**:
-Expert migration triggered by a node join event to restore missing planned replicas onto the rejoined blank node. Node failure events remove capacity and expert state but do not trigger migration in the MVP.
+Expert migration triggered by a rank join event to restore missing planned replicas whose destination ranks rejoined. Rank failure events remove capacity and expert state but do not trigger migration in the MVP.
 _Avoid_: Failure repair, proactive failover migration
 
 **Post-Repair Resume**:
-The rule that request streams on a rejoined node resume only after join repair migration for that simulation step completes. Rejoined ranks do not produce inference traffic before their repair phase.
+The rule that request streams on rejoined ranks resume only after join repair migration for that simulation step completes. Rejoined ranks do not produce inference traffic before their repair phase.
 _Avoid_: Immediate join resume, pre-repair inference
 
 ## Example Dialogue

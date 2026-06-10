@@ -181,7 +181,7 @@ mapping: node `n` owns ranks `[n·rpn, (n+1)·rpn)` (`rank_to_node`, `slot_rank`
 node ≡ the toposim server (so derived manifest rows set `gpus_per_server = ranks_per_node`).
 Request streams are `RequestStream(source_rank, local_request_index, path, work, cursor)`,
 256 of them, 16 per rank. `WorkItem(token_index, layer_id, expert_ids)`; `LayerPlan(layer_id,
-placement)`; `NodeEvent(step, event_type, node)`; `ScenarioConfig(scenario_id, ranks_per_node,
+placement)`; `NodeEvent(step, event_type, ranks)`; `ScenarioConfig(scenario_id, ranks_per_node,
 capacity_per_rank_per_layer, events)`.
 
 ### Config (`load_config`, ADR 0022)
@@ -189,7 +189,8 @@ Validates: `scenario_id` slug, `ranks_per_node` divides 16, `capacity_per_rank_p
 (default 16; `16·cap ≥ 128·k_min`), `replication_strategy` (default `"adaptive"`; must be a key
 of `allocator.REPLICATION_STRATEGIES`, i.e. `adaptive`/`uniform`), events **strictly increasing
 by step** (so ≤1 event/step),
-type ∈ {fail,join}, node bounds, fail/join state transitions (no double-fail / join-live).
+type ∈ {fail,join}, rank-list shape, rank bounds, fail/join state transitions
+(no double-fail rank / join-live rank).
 `K_MIN=2`, `EXPERT_STATE_BYTES=251_658_240` are module constants. `SCENARIO_ROOT =
 generate.OUTPUT_DIR / "scenarios"` (monkeypatch this in tests to redirect output).
 
@@ -209,8 +210,8 @@ source ranks for initial expert-state replication.
 - **`build_initial_replication_matrix(plans, rpn)`** (ADR 0017, step −1): one aggregated matrix;
   for each `(layer, expert)` charge `EXPERT_STATE_BYTES` from the baseline owner to each *other*
   planned replica rank (self-copy free).
-- **`build_join_repair_matrix(plans, current_slots, joined_node, live_nodes, rpn)`** (ADRs
-  0008/0018/0019): on join, restore each planned slot on the rejoined node that isn't currently
+- **`build_join_repair_matrix(plans, current_slots, joined_ranks, failed_ranks_set, rpn)`** (ADRs
+  0008/0018/0019): on join, restore each planned slot whose destination rank rejoined and isn't currently
   present, sourced via `choose_repair_source` (lowest live rank on the destination node,
   else circular rank search from the destination rank). Returns `(matrix, disk_bytes)`; any live
   source produces network repair and no disk IO for that replica. Only no live source increments
@@ -222,16 +223,18 @@ source ranks for initial expert-state replication.
   partial traffic. The function returns the cursor histogram and the streams that advanced.
 
 ### State model (key difference from a naive "node up" check)
-`current_slots: {(layer,expert): set[Slot]}` tracks *actual* live expert state. `fail` calls
-`remove_failed_node_state` (deletes the failed node's slots); `join` restores each missing planned
-slot via either network migration or disk IO, never both. Routing reads `live_replica_ranks` from
-`current_slots ∩ live_nodes`.
+`failed_ranks_set` is the authoritative liveness state. `current_slots:
+{(layer,expert): set[Slot]}` tracks *actual* live expert state. `fail` calls
+`remove_failed_rank_state` (deletes slots on failed ranks); `join` restores each missing planned
+slot whose destination rank rejoined via either network migration or disk IO, never both. Routing
+reads `live_replica_ranks` from `current_slots` after filtering out failed ranks.
 
 ### Simulation loop (`run_scenario(config, streams, plans)`, ADRs 0001/0007/0012/0013/0019/0020/0028/0031)
 Per absolute step from 0: if no live streams remain but streams are incomplete, jump to the next
 event step (else `terminal_failure` "deadlock", return 1). Apply the step's event (fail: drop
-state + `node_event` row; join: restore planned slots, put any disk recovery bytes on the
-`node_event` as `lost_expert_bytes`, then optional `expert_migration` matrix). Then if any streams are live, build the all2allv
+rank state + `node_event` row with `metadata.ranks`; join: restore planned slots on joined ranks,
+put any disk recovery bytes on the `node_event` as `lost_expert_bytes`, then optional
+`expert_migration` matrix). Then if any streams are live, build the all2allv
 matrix; unavailable experts block their streams. If no stream can advance and no future event
 exists, emit `terminal_failure` and return 1. Emit matrices only when nonzero. Advance advancing
 streams. Returns 0 on completion.
@@ -252,8 +255,11 @@ streams. Returns 0 on completion.
 
 ### Verified behavior (`scenario_tests.py`, 18 tests, rewritten against this API)
 - `no_events`: exit 0, 768 all2allv matrices, lockstep.
-- `node1_fail_join` (fail@100 / join@200): exit 0, **survives**, 868 all2allv steps (768 + 100
-  paused), 2 node_events + 1 migration; during failure `failed_nodes == [1]` and 64 streams paused.
+- `node1_fail_join` (fail@100 / join@200 for ranks `[4,5,6,7]`): exit 0,
+  **survives**, 868 all2allv steps (768 + 100 paused), 2 node_events + 1 migration;
+  during failure `failed_nodes == [1]`, `failed_ranks == [4,5,6,7]`, and 64 streams paused.
+- `rank_cycle_fail_join`: exit 0, **survives**, 32 rank events and 16 migrations while each
+  rank fails and rejoins one at a time.
 - two-node-fail (no rejoin): `terminal_failure`, exit 1.
 
 ---

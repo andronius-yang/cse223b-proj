@@ -18,7 +18,7 @@ Three coordinates locate a replica. Understanding them is the whole game:
 
 | Term | Meaning | Why it matters |
 |------|---------|----------------|
-| **node** | A server — the **failure domain**. A node failure kills *all* its GPUs at once. | Survival is decided per node, not per GPU. |
+| **node** | A server-sized placement domain containing a contiguous block of ranks. | Lazarus survival is checked per node; scenario configs represent a full-node failure by failing every rank in that node block. |
 | **local_rank** | Which GPU *within* a node, `0 .. gpus_per_node-1`. | Identifies the physical GPU. |
 | **slot** | Which capacity slot *on* that GPU, `0 .. c-1` (`c` = `capacity`). | Multiple experts share one GPU; this is the per-GPU stacking dimension. |
 
@@ -177,8 +177,8 @@ survivors, collapsed = repair(expert_ranks(placement, gpus_per_node=4), failed_r
 # survivors[e] = live ranks for expert e; collapsed = [e, ...] with no live replica
 ```
 
-For a node-level check without building the rank map, `placement.survives` answers
-directly:
+For the allocator's node-level survival check without building the rank map,
+`placement.survives` answers directly:
 
 ```python
 placement.survives(failed_nodes=[1])   # True iff every expert keeps a live replica
@@ -263,7 +263,7 @@ keeps replicas on distinct nodes, so single-node-failure survival holds.
 | Replica count for an expert | `placement.replicas(e)` or `len(expert_to_slots[e])` |
 | Which expert is in a specific slot | `placement.slot_to_expert[Slot(...)]` |
 | GPU/node → experts | invert (§5) |
-| Survives a failure? | `placement.survives(failed_nodes)` |
+| Survives a node-block failure? | `placement.survives(failed_nodes)` |
 | Live ranks + collapsed experts after failure | `repair(expert_ranks(...), failed_ranks)` |
 | Global rank ↔ (node, local_rank) | `rank = node*gpus_per_node + local_rank` |
 | Slot → global rank (scenario side) | `slot_rank(slot, ranks_per_node)` |

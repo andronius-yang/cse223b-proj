@@ -1,6 +1,6 @@
 # Emit Initial Expert Replication Cost
 
-The MVP emits a special initial expert replication matrix that records the traffic required to realize the planned placement target before inference begins. Initial expert state is sourced from the baseline contiguous expert owners already used by `traffic-gen`, not from a synthetic bootstrap rank. This startup cost is separate from later expert migration caused by node fail and join events.
+The MVP emits a special initial expert replication matrix that records the traffic required to realize the planned placement target before inference begins. Initial expert state is sourced from the baseline contiguous expert owners already used by `traffic-gen`, not from a synthetic bootstrap rank. This startup cost is separate from later expert migration caused by rank fail and join events.
 
 **Consequences**
 

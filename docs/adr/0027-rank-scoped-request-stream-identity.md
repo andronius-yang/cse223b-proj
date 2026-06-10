@@ -4,4 +4,4 @@ Failure-aware scenarios identify request streams by `(source_rank, local_request
 
 **Consequences**
 
-Node failure pauses all request streams whose source ranks belong to that node. Requests are not reshuffled to other ranks in the MVP.
+Rank failure pauses all request streams whose source rank is failed. A full-node failure is represented by failing every rank in that node's contiguous rank block. Requests are not reshuffled to other ranks in the MVP.

@@ -4,4 +4,4 @@ Replica allocation, placement, and migration operate on layer experts, not globa
 
 **Consequences**
 
-Expert migration traffic is layer-specific. A node losing expert 5 for layer 7 does not imply anything about expert 5 for another layer unless that separate layer expert was also placed on the failed node.
+Expert migration traffic is layer-specific. A rank losing expert 5 for layer 7 does not imply anything about expert 5 for another layer unless that separate layer expert was also placed on a failed rank.

@@ -89,20 +89,22 @@ The scenario config is JSON:
   "ranks_per_node": 4,
   "capacity_per_rank_per_layer": 16,
   "events": [
-    {"step": 100, "type": "fail", "node": 1},
-    {"step": 200, "type": "join", "node": 1}
+    {"step": 100, "type": "fail", "ranks": [4, 5, 6, 7]},
+    {"step": 200, "type": "join", "ranks": [4, 5, 6, 7]}
   ]
 }
 ```
 
 The MVP should include checked-in examples at `scenarios/no_events.json` and
-`scenarios/node1_fail_join.json`. The no-event scenario must complete normally,
-and the node 1 fail-at-step-100 join-at-step-200 scenario must complete
-end-to-end.
+`scenarios/node1_fail_join.json`. The no-event scenario must complete normally.
+The node 1 fail-at-step-100 join-at-step-200 scenario represents node 1 by its
+rank block `[4, 5, 6, 7]` and must complete end-to-end.
 
-Events use zero-based node ids and absolute simulation steps. Step `0` is the
-first inference tick; initial expert replication is emitted separately with
-`step = -1`. The MVP allows at most one node event per step.
+Events use zero-based rank ids and absolute simulation steps. A single-rank
+failure is written as `{"ranks": [5]}`; a full-node failure is written as the
+node's rank block. Step `0` is the first inference tick; initial expert
+replication is emitted separately with `step = -1`. The MVP allows at most one
+fail/join event per step.
 The default topology is 16 ranks arranged as 4 contiguous nodes with 4 ranks per
 node; `traffic-gen` and `topsim` must use the same ranks-per-node value.
 
@@ -123,15 +125,17 @@ AllToAllV traffic are separate files linked by the same `step` in the timeline.
 Disk IO repair is recorded as `lost_expert_bytes` on the join `node_event`, not
 as a rank-to-rank matrix. If any live replica exists for a missing expert,
 repair uses network migration instead of disk IO for that replica.
-The `scenario_timeline.jsonl` is the source of truth for ordering, node events,
+The `scenario_timeline.jsonl` is the source of truth for ordering, fail/join events,
 traffic kind, and request-progress metadata. The `topsim_matrix_manifest.jsonl`
 contains only matrix-bearing rows for current `topsim-batch` compatibility.
 Each `topsim_matrix_manifest.jsonl` row sets `gpus_per_server` to the scenario
 `ranks_per_node` value.
 
-Node events appear as explicit timeline rows. A join step can therefore contain
-`node_event`, `expert_migration`, and `all2allv` rows with the same `step`.
-Rows with the same `step` use this phase order: `node_event`,
+Fail/join events appear as explicit timeline rows. The row kind remains
+`node_event` for compatibility, but event metadata records `ranks`, not `node`.
+A join step can therefore contain `node_event`, `expert_migration`, and
+`all2allv` rows with the same `step`. Rows with the same `step` use this phase
+order: `node_event`,
 `expert_migration`, then `all2allv`.
 `initial_expert_replication` uses `step = -1`.
 
