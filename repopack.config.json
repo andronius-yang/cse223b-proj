@@ -1,0 +1,12 @@
+{
+  "output": {
+    "filePath": "moe.txt"
+  },
+  "ignore": {
+    "customPatterns": [
+      "**/*.txt",
+      "**/*.json"
+    ]
+  }
+}
+

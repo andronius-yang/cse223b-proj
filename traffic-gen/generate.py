@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import glob
 from pathlib import Path
 from typing import Any, Iterator
 
@@ -45,8 +46,12 @@ def validate_constants() -> None:
         fail("DTYPE_BYTES must be positive")
 
 
-def discover_trace_paths() -> list[Path]:
-    subject_dirs = [path for path in Path(".").glob(INPUT_GLOB) if path.is_dir()]
+def discover_trace_paths(input_glob: str = INPUT_GLOB, root: Path | str = ".") -> list[Path]:
+    if Path(input_glob).is_absolute():
+        candidates = [Path(path) for path in glob.glob(input_glob)]
+    else:
+        candidates = [path for path in Path(root).glob(input_glob)]
+    subject_dirs = [path for path in candidates if path.is_dir()]
     trace_paths: list[Path] = []
     for subject_dir in subject_dirs:
         trace_paths.extend(path for path in subject_dir.glob("*.json") if path.is_file())
