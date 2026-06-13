@@ -2,15 +2,36 @@
 from __future__ import annotations
 
 import argparse
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import csv
 import itertools
 import json
 import os
+import random
 import shutil
 import subprocess
 import sys
+from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
+
+try:
+    from tqdm import tqdm
+except ImportError:  # pragma: no cover - keeps the CLI usable in minimal envs.
+    def tqdm(iterable: Iterable[Any], **kwargs: Any) -> Iterable[Any]:
+        total = int(kwargs.get("total") or 0)
+        desc = str(kwargs.get("desc") or "progress")
+        completed = 0
+        for item in iterable:
+            completed += 1
+            if total:
+                width = 24
+                filled = int(width * completed / total)
+                bar = "#" * filled + "-" * (width - filled)
+                print(f"\r{desc}: |{bar}| {completed}/{total}", end="", file=sys.stderr, flush=True)
+            yield item
+        if total:
+            print(file=sys.stderr)
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -36,7 +57,10 @@ SUMMARY_FIELDS = [
     "scaleup_gbps",
     "scaleout_gbps",
     "storage_read_gbps",
+    "request_rerun_us",
+    "stall_step_us",
     "serviceable",
+    "error",
     "terminal_failure_reason",
     "all2allv_us",
     "migration_network_us",
@@ -47,20 +71,46 @@ SUMMARY_FIELDS = [
     "cold_start_bytes",
     "lost_expert_bytes",
     "lost_expert_count",
+    "recovery_bytes",
     "max_paused_request_streams",
     "mean_paused_request_streams",
     "paused_stream_step_area",
     "stalled_request_pct_max",
     "stalled_request_pct_mean",
+    "network_repair_us",
     "data_lake_reload_us",
+    "request_rerun_penalty_us",
+    "request_stall_penalty_us",
     "stalled_request_penalty_us",
     "T_healthy",
     "T_lake",
     "T_replica_repair",
+    "T_network_repair_path",
+    "T_data_lake_path",
+    "T_request_rerun_path",
     "ft_tax",
     "repair_source_speedup",
+    "repair_source_speedup_vs_lake",
     "system_benefit_vs_lake",
-    "repair_fraction_of_total",
+    "benefit_network_vs_lake",
+    "benefit_network_vs_rerun",
+    "break_even_storage_gbps",
+    "replica_repair_fraction",
+    "lake_repair_fraction",
+    "network_repair_wins",
+    "data_lake_wins",
+    "rerun_wins",
+]
+
+SCENARIOS = [
+    "no_events",
+    "rank4_fail_join",
+    "rank4_fail_no_join",
+    "node1_fail_join",
+    "node1_fail_no_join",
+    "two_node_fail_join",
+    "two_node_fail_no_join",
+    "probabilistic",
 ]
 
 
@@ -119,6 +169,23 @@ def write_csv(path: Path, rows: list[dict[str, Any]]) -> None:
             writer.writerow({field: row.get(field, "") for field in SUMMARY_FIELDS})
 
 
+def write_rows_csv(path: Path, rows: list[dict[str, Any]], fieldnames: list[str] | None = None) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if fieldnames is None:
+        fieldnames = []
+        seen: set[str] = set()
+        for row in rows:
+            for key in row:
+                if key not in seen:
+                    seen.add(key)
+                    fieldnames.append(key)
+    with path.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fieldnames)
+        writer.writeheader()
+        for row in rows:
+            writer.writerow({field: row.get(field, "") for field in fieldnames})
+
+
 def safe_div(numerator: float, denominator: float) -> float:
     if abs(denominator) <= EPSILON:
         return 0.0
@@ -136,30 +203,152 @@ def placement_to_strategy(placement: str) -> str:
 def node1_events(ranks_per_node: int) -> list[dict[str, Any]]:
     start = ranks_per_node
     ranks = list(range(start, start + ranks_per_node))
-    return [
-        {"step": 100, "type": "fail", "ranks": ranks},
-        {"step": 200, "type": "join", "ranks": ranks},
-    ]
+    return fail_join_events(ranks)
+
+
+def fail_join_events(ranks: list[int], *, join: bool = True) -> list[dict[str, Any]]:
+    events = [{"step": 100, "type": "fail", "ranks": ranks}]
+    if join:
+        events.append({"step": 200, "type": "join", "ranks": ranks})
+    return events
+
+
+def node_ranks(node_id: int, ranks_per_node: int) -> list[int]:
+    start = node_id * ranks_per_node
+    return list(range(start, start + ranks_per_node))
+
+
+def validate_scenario_name(scenario: str) -> None:
+    if scenario not in SCENARIOS:
+        fail(f"supported scenarios are {', '.join(SCENARIOS)}")
+
+
+def validate_scenario_list(value: str) -> None:
+    for scenario in parse_csv(value):
+        validate_scenario_name(scenario)
+
+
+def ensure_single_value(name: str, value: str) -> None:
+    if len(parse_csv(str(value))) != 1:
+        fail(f"{name} accepts comma-separated values only with --sweep")
+
+
+def node_failure_events(node_ids: list[int], ranks_per_node: int, *, join: bool) -> list[dict[str, Any]]:
+    ranks: list[int] = []
+    for node_id in node_ids:
+        ranks.extend(node_ranks(node_id, ranks_per_node))
+    return fail_join_events(ranks, join=join)
+
+
+def rank4_events(*, join: bool) -> list[dict[str, Any]]:
+    return fail_join_events([4], join=join)
 
 
 def scenario_events(scenario: str, ranks_per_node: int) -> list[dict[str, Any]]:
+    validate_scenario_name(scenario)
+    if scenario == "probabilistic":
+        fail("--scenario probabilistic requires --sweep and --probabilistic-scenarios > 0")
     if scenario == "no_events":
         return []
+    if scenario == "rank4_fail_join":
+        return rank4_events(join=True)
+    if scenario == "rank4_fail_no_join":
+        return rank4_events(join=False)
     if scenario == "node1_fail_join":
-        return node1_events(ranks_per_node)
-    fail("supported scenarios are no_events and node1_fail_join")
+        return node_failure_events([1], ranks_per_node, join=True)
+    if scenario == "node1_fail_no_join":
+        return node_failure_events([1], ranks_per_node, join=False)
+    if scenario == "two_node_fail_join":
+        return node_failure_events([1, 2], ranks_per_node, join=True)
+    if scenario == "two_node_fail_no_join":
+        return node_failure_events([1, 2], ranks_per_node, join=False)
+    fail(f"unsupported scenario: {scenario}")
+
+
+def sampled_failure_scenario(args: argparse.Namespace, index: int) -> tuple[str, list[dict[str, Any]]]:
+    rng = random.Random(int(args.failure_seed) + index)
+    fail_step = rng.randint(int(args.failure_step_min), int(args.failure_step_max))
+    join = rng.random() >= float(args.no_join_prob)
+    join_step = fail_step + rng.randint(int(args.join_delay_min), int(args.join_delay_max))
+    num_nodes = NUM_RANKS // int(args.ranks_per_node)
+
+    roll = rng.random()
+    if roll < float(args.two_node_failure_prob):
+        node_ids = sorted(rng.sample(range(num_nodes), 2))
+        ranks: list[int] = []
+        for node_id in node_ids:
+            ranks.extend(node_ranks(node_id, int(args.ranks_per_node)))
+        scope = f"twonode{node_ids[0]}_{node_ids[1]}"
+    elif roll < float(args.two_node_failure_prob) + float(args.node_failure_prob):
+        node_id = rng.randrange(num_nodes)
+        ranks = node_ranks(node_id, int(args.ranks_per_node))
+        scope = f"node{node_id}"
+    else:
+        rank = rng.randrange(NUM_RANKS)
+        ranks = [rank]
+        scope = f"rank{rank}"
+
+    events = [{"step": fail_step, "type": "fail", "ranks": ranks}]
+    suffix = "nojoin"
+    if join:
+        events.append({"step": join_step, "type": "join", "ranks": ranks})
+        suffix = f"join{join_step}"
+    scenario_id = f"prob_{index:03d}_{scope}_fail{fail_step}_{suffix}"
+    return scenario_id, events
+
+
+def path_component_matches(path: Path, token: str) -> bool:
+    token = token.lower()
+    for part in path.parts:
+        normalized = part.lower()
+        pieces = normalized.replace(".", "-").split("-")
+        if token in pieces or normalized == token:
+            return True
+    return False
 
 
 def trace_matches(path: Path, benchmark: str, subject: str) -> bool:
-    text = path.as_posix().lower()
-    return path.suffix == ".json" and benchmark.lower() in text and subject.lower() in text
+    return (
+        path.suffix == ".json"
+        and path_component_matches(path, benchmark)
+        and path_component_matches(path, subject)
+    )
 
 
-def discover_trace_files(trace_root: Path, benchmark: str, subjects: list[str]) -> list[Path]:
+def trace_has_requested_decode(path: Path, requested: int) -> bool:
+    try:
+        payload = read_json(path)
+    except json.JSONDecodeError as exc:
+        fail(f"malformed JSON in candidate trace {path}: {exc}")
+    if not isinstance(payload, list):
+        fail(f"candidate trace {path} must contain a JSON list")
+    return len(payload) - 1 >= requested
+
+
+def balanced_quotas(total: int, count: int) -> list[int]:
+    base = total // count
+    remainder = total % count
+    return [base + (1 if index < remainder else 0) for index in range(count)]
+
+
+def discover_trace_files(
+    trace_root: Path,
+    benchmark: str,
+    subjects: list[str],
+    *,
+    decode_steps: int,
+    seed: int,
+) -> tuple[list[Path], dict[str, int]]:
     if not trace_root.exists():
         fail(f"trace root does not exist: {trace_root}")
+    if not subjects:
+        fail("at least one subject is required")
+
+    rng = random.Random(seed)
     selected: list[Path] = []
-    for subject in subjects:
+    selected_counts: dict[str, int] = {}
+    quotas = balanced_quotas(BATCH_SIZE, len(subjects))
+    for subject, quota in zip(subjects, quotas, strict=True):
         subject_files: list[Path] = []
         for root, _, files in os.walk(trace_root):
             root_path = Path(root)
@@ -169,10 +358,26 @@ def discover_trace_files(trace_root: Path, benchmark: str, subjects: list[str]) 
                     subject_files.append(path)
         if not subject_files:
             fail(f"found no JSON traces for benchmark={benchmark!r} subject={subject!r} under {trace_root}")
-        selected.extend(subject_files)
-    if len(selected) < BATCH_SIZE:
-        fail(f"found {len(selected)} matching trace files, need at least {BATCH_SIZE}")
-    return selected[:BATCH_SIZE]
+
+        subject_files = sorted(subject_files)
+        rng.shuffle(subject_files)
+        long_enough = [path for path in subject_files if trace_has_requested_decode(path, decode_steps)]
+        long_enough_set = set(long_enough)
+        candidates = long_enough if len(long_enough) >= quota else long_enough + [
+            path for path in subject_files if path not in long_enough_set
+        ]
+        if len(candidates) < quota:
+            fail(
+                f"found {len(candidates)} matching trace files for benchmark={benchmark!r} "
+                f"subject={subject!r}, need {quota}"
+            )
+        chosen = candidates[:quota]
+        selected.extend(chosen)
+        selected_counts[subject] = len(chosen)
+
+    if len(selected) != BATCH_SIZE:
+        fail(f"selected {len(selected)} trace files, expected exactly {BATCH_SIZE}")
+    return selected, selected_counts
 
 
 def effective_decode_steps(trace_paths: list[Path], requested: int) -> int:
@@ -225,6 +430,7 @@ def scenario_config(
     ranks_per_node: int,
     workload: Path,
     output_dir: Path,
+    events: list[dict[str, Any]] | None = None,
 ) -> Path:
     payload = {
         "scenario_id": scenario,
@@ -234,7 +440,7 @@ def scenario_config(
         "decode_steps": decode_steps,
         "input_glob": str(workload / "llama4-*"),
         "output_dir": str(output_dir),
-        "events": scenario_events(scenario, ranks_per_node),
+        "events": events if events is not None else scenario_events(scenario, ranks_per_node),
     }
     path = run_dir / f"{scenario}_config.json"
     write_json(path, payload)
@@ -283,13 +489,50 @@ def run_toposim(
     return command, code
 
 
+def cleanup_point(run_dir: Path, keep_raw: bool, keep_logs: bool, succeeded: bool) -> None:
+    if not keep_raw:
+        for path in run_dir.rglob("*.txt"):
+            if path.is_file() or path.is_symlink():
+                path.unlink(missing_ok=True)
+        workload = run_dir / "workload"
+        if workload.exists() and workload.is_dir():
+            shutil.rmtree(workload)
+
+    if succeeded and not keep_logs:
+        logs = run_dir / "logs"
+        if logs.exists():
+            for pattern in ("*.out", "*.err"):
+                for path in logs.glob(pattern):
+                    path.unlink(missing_ok=True)
+
+
+def slim_point_artifacts(run_dir: Path) -> None:
+    for relative in (
+        "result.json",
+        "healthy_result.json",
+        "scenario_timeline.jsonl",
+        "topsim_matrix_manifest.jsonl",
+        "healthy_no_events/scenario_timeline.jsonl",
+        "healthy_no_events/topsim_matrix_manifest.jsonl",
+    ):
+        path = run_dir / relative
+        if path.exists() and path.is_file():
+            path.unlink()
+
+
 def run_one(args: argparse.Namespace, out_dir: Path) -> dict[str, Any]:
     if out_dir.exists():
         shutil.rmtree(out_dir)
     out_dir.mkdir(parents=True)
 
     subjects = parse_csv(args.subjects)
-    selected_traces = discover_trace_files(Path(args.trace_root), args.benchmark, subjects)
+    selected_traces, selected_counts = discover_trace_files(
+        Path(args.trace_root),
+        args.benchmark,
+        subjects,
+        decode_steps=int(args.decode_steps),
+        seed=int(args.seed),
+    )
     decode_effective = effective_decode_steps(selected_traces, args.decode_steps)
     workload = prepare_workload(out_dir, args.benchmark, subjects, selected_traces)
 
@@ -309,10 +552,16 @@ def run_one(args: argparse.Namespace, out_dir: Path) -> dict[str, Any]:
             "storage_read_gbps": args.storage_read_gbps,
             "data_lake_fixed_us": args.data_lake_fixed_us,
             "data_lake_per_expert_us": args.data_lake_per_expert_us,
+            "request_rerun_us": args.request_rerun_us,
+            "stall_step_us": args.stall_step_us,
             "kv_penalty_per_stalled_request_us": args.kv_penalty_per_stalled_request_us,
+            "events_override": getattr(args, "events_override", None),
+            "failure_seed": args.failure_seed,
             "expert_size_bytes": EXPERT_SIZE_BYTES,
+            "seed": args.seed,
         },
         "selected_traces": [str(path) for path in selected_traces],
+        "selected_counts_by_subject": selected_counts,
         "outputs": {
             "run_dir": str(out_dir),
             "scenario_timeline": str(out_dir / "scenario_timeline.jsonl"),
@@ -332,6 +581,7 @@ def run_one(args: argparse.Namespace, out_dir: Path) -> dict[str, Any]:
         ranks_per_node=args.ranks_per_node,
         workload=workload,
         output_dir=out_dir,
+        events=getattr(args, "events_override", None),
     )
     traffic_command = ["python3", str(TRAFFIC_GEN), str(main_cfg)]
     traffic_code = run_command(
@@ -403,6 +653,9 @@ def run_one(args: argparse.Namespace, out_dir: Path) -> dict[str, Any]:
 
     write_json(out_dir / "run_manifest.json", manifest)
     row = summarize_run(out_dir)
+    cleanup_point(out_dir, keep_raw=args.keep_raw, keep_logs=args.keep_logs, succeeded=True)
+    if args.slim_artifacts:
+        slim_point_artifacts(out_dir)
     return row
 
 
@@ -468,24 +721,28 @@ def summarize_run(run_dir: Path) -> dict[str, Any]:
     network_repair_bytes = numeric_total(totals, "network_repair_bytes")
     cold_start_bytes = numeric_total(totals, "cold_start_bytes")
     lost_expert_bytes = float(timeline["lost_expert_bytes"])
-    lost_or_repair_bytes = cold_start_bytes or lost_expert_bytes or network_repair_bytes
+    recovery_bytes = cold_start_bytes or lost_expert_bytes or network_repair_bytes
     lost_count = float(timeline["lost_expert_count"]) or safe_div(
-        lost_or_repair_bytes,
+        recovery_bytes,
         float(params.get("expert_size_bytes", EXPERT_SIZE_BYTES)),
     )
 
     storage_read_gbps = float(params["storage_read_gbps"])
+    network_repair_us = migration_network_us + cold_start_storage_us
     data_lake_reload_us = (
         float(params.get("data_lake_fixed_us", 0.0))
-        + safe_div(lost_or_repair_bytes, storage_read_gbps * GBPS_TO_BYTES_PER_US)
+        + safe_div(recovery_bytes, storage_read_gbps * GBPS_TO_BYTES_PER_US)
         + lost_count * float(params.get("data_lake_per_expert_us", 0.0))
     )
-    stalled_request_penalty_us = (
-        float(timeline["paused_stream_step_area"]) * float(params.get("kv_penalty_per_stalled_request_us", 0.0))
-    )
+    stall_step_us = float(params.get("stall_step_us", params.get("kv_penalty_per_stalled_request_us", 0.0)))
+    request_stall_penalty_us = float(timeline["paused_stream_step_area"]) * stall_step_us
+    affected_requests = float(timeline["max_paused_request_streams"])
+    request_rerun_penalty_us = affected_requests * float(params.get("request_rerun_us", 0.0))
     t_healthy = numeric_total(healthy_totals, "all2allv_us")
-    t_lake = all2allv_us + data_lake_reload_us + stalled_request_penalty_us
-    t_replica = all2allv_us + migration_network_us + cold_start_storage_us + stalled_request_penalty_us
+    t_data_lake_path = all2allv_us + data_lake_reload_us + request_stall_penalty_us
+    t_network_repair_path = all2allv_us + network_repair_us + request_stall_penalty_us
+    t_request_rerun_path = all2allv_us + request_rerun_penalty_us
+    repair_source_speedup_vs_lake = safe_div(data_lake_reload_us, max(network_repair_us, EPSILON))
 
     serviceable = not timeline["terminal_failure_reason"] and all(
         command.get("returncode") == 0 for command in manifest.get("commands", [])
@@ -502,6 +759,8 @@ def summarize_run(run_dir: Path) -> dict[str, Any]:
         "scaleup_gbps": params["scaleup_gbps"],
         "scaleout_gbps": params["scaleout_gbps"],
         "storage_read_gbps": params["storage_read_gbps"],
+        "request_rerun_us": params.get("request_rerun_us", 0.0),
+        "stall_step_us": stall_step_us,
         "serviceable": serviceable,
         "terminal_failure_reason": timeline["terminal_failure_reason"],
         "all2allv_us": all2allv_us,
@@ -513,23 +772,35 @@ def summarize_run(run_dir: Path) -> dict[str, Any]:
         "cold_start_bytes": cold_start_bytes,
         "lost_expert_bytes": lost_expert_bytes,
         "lost_expert_count": lost_count,
+        "recovery_bytes": recovery_bytes,
         "max_paused_request_streams": timeline["max_paused_request_streams"],
         "mean_paused_request_streams": timeline["mean_paused_request_streams"],
         "paused_stream_step_area": timeline["paused_stream_step_area"],
         "stalled_request_pct_max": timeline["stalled_request_pct_max"],
         "stalled_request_pct_mean": timeline["stalled_request_pct_mean"],
+        "network_repair_us": network_repair_us,
         "data_lake_reload_us": data_lake_reload_us,
-        "stalled_request_penalty_us": stalled_request_penalty_us,
+        "request_rerun_penalty_us": request_rerun_penalty_us,
+        "request_stall_penalty_us": request_stall_penalty_us,
+        "stalled_request_penalty_us": request_stall_penalty_us,
         "T_healthy": t_healthy,
-        "T_lake": t_lake,
-        "T_replica_repair": t_replica,
-        "ft_tax": safe_div(t_replica, t_healthy),
-        "repair_source_speedup": safe_div(data_lake_reload_us, migration_network_us),
-        "system_benefit_vs_lake": safe_div(t_lake, t_replica),
-        "repair_fraction_of_total": safe_div(
-            migration_network_us + cold_start_storage_us + data_lake_reload_us,
-            max(t_replica, EPSILON),
-        ),
+        "T_lake": t_data_lake_path,
+        "T_replica_repair": t_network_repair_path,
+        "T_network_repair_path": t_network_repair_path,
+        "T_data_lake_path": t_data_lake_path,
+        "T_request_rerun_path": t_request_rerun_path,
+        "ft_tax": safe_div(t_network_repair_path, t_healthy),
+        "repair_source_speedup": repair_source_speedup_vs_lake,
+        "repair_source_speedup_vs_lake": repair_source_speedup_vs_lake,
+        "system_benefit_vs_lake": safe_div(t_data_lake_path, t_network_repair_path),
+        "benefit_network_vs_lake": safe_div(t_data_lake_path, t_network_repair_path),
+        "benefit_network_vs_rerun": safe_div(t_request_rerun_path, t_network_repair_path),
+        "break_even_storage_gbps": storage_read_gbps * repair_source_speedup_vs_lake,
+        "replica_repair_fraction": safe_div(network_repair_us, max(t_network_repair_path, EPSILON)),
+        "lake_repair_fraction": safe_div(data_lake_reload_us, max(t_data_lake_path, EPSILON)),
+        "network_repair_wins": t_network_repair_path < min(t_data_lake_path, t_request_rerun_path),
+        "data_lake_wins": t_data_lake_path < min(t_network_repair_path, t_request_rerun_path),
+        "rerun_wins": t_request_rerun_path < min(t_network_repair_path, t_data_lake_path),
     }
     write_json(run_dir / "summary.json", row)
     write_csv(run_dir / "summary.csv", [row])
@@ -553,8 +824,8 @@ def cmd_fetch_traces(args: argparse.Namespace) -> None:
             path
             for path in files
             if path.endswith(".json")
-            and args.benchmark.lower() in path.lower()
-            and subject.lower() in path.lower()
+            and path_component_matches(Path(path), args.benchmark)
+            and path_component_matches(Path(path), subject)
             and (args.model.split("/")[-1].lower() in path.lower() or "llama4" in path.lower())
         ]
         if not matches:
@@ -581,51 +852,245 @@ def cmd_run(args: argparse.Namespace) -> None:
         return
     row = run_one(args, Path(args.out_dir))
     print(f"wrote summary to {Path(args.out_dir) / 'summary.json'}")
-    print(f"T_replica_repair={row['T_replica_repair']:.6f} us, T_lake={row['T_lake']:.6f} us")
+    print(
+        f"T_network_repair_path={row['T_network_repair_path']:.6f} us, "
+        f"T_data_lake_path={row['T_data_lake_path']:.6f} us, "
+        f"T_request_rerun_path={row['T_request_rerun_path']:.6f} us"
+    )
 
 
 def combo_slug(params: dict[str, Any]) -> str:
     return (
         f"{params['scenario']}_{params['placement']}_cap{params['capacity']}"
         f"_steps{params['decode_steps']}_so{params['scaleout_gbps']}"
-        f"_store{params['storage_read_gbps']}"
+        f"_store{params['storage_read_gbps']}_rerun{params['request_rerun_us']}"
+        f"_stall{params['stall_step_us']}"
     ).replace(".", "p")
+
+
+def error_row(point: argparse.Namespace, run_dir: Path, error: BaseException) -> dict[str, Any]:
+    return {
+        "benchmark": point.benchmark,
+        "subjects": point.subjects,
+        "scenario": point.scenario,
+        "placement": point.placement,
+        "capacity": point.capacity,
+        "decode_steps_requested": point.decode_steps,
+        "decode_steps_effective": "",
+        "ranks_per_node": point.ranks_per_node,
+        "scaleup_gbps": point.scaleup_gbps,
+        "scaleout_gbps": point.scaleout_gbps,
+        "storage_read_gbps": point.storage_read_gbps,
+        "request_rerun_us": point.request_rerun_us,
+        "stall_step_us": point.stall_step_us,
+        "serviceable": False,
+        "error": str(error),
+        "terminal_failure_reason": str(error),
+    }
+
+
+def run_or_resume_point(point: argparse.Namespace, run_dir: Path) -> dict[str, Any]:
+    if point.resume and (run_dir / "summary.json").exists():
+        row = read_json(run_dir / "summary.json")
+        cleanup_point(run_dir, keep_raw=point.keep_raw, keep_logs=point.keep_logs, succeeded=True)
+        if point.slim_artifacts:
+            slim_point_artifacts(run_dir)
+        return row
+    return run_one(point, run_dir)
+
+
+def numeric_values(rows: list[dict[str, Any]], key: str) -> list[float]:
+    values: list[float] = []
+    for row in rows:
+        value = row.get(key)
+        if value in ("", None):
+            continue
+        try:
+            values.append(float(value))
+        except (TypeError, ValueError):
+            continue
+    return values
+
+
+def mean_metric(rows: list[dict[str, Any]], key: str) -> float:
+    values = numeric_values(rows, key)
+    return safe_div(sum(values), len(values)) if values else 0.0
+
+
+def serviceable_rate(rows: list[dict[str, Any]]) -> float:
+    if not rows:
+        return 0.0
+    return sum(1 for row in rows if str(row.get("serviceable")).lower() == "true") / len(rows)
+
+
+def aggregate_rows(
+    rows: list[dict[str, Any]],
+    *,
+    group_by: list[str],
+    metrics: dict[str, str],
+) -> list[dict[str, Any]]:
+    groups: dict[tuple[Any, ...], list[dict[str, Any]]] = {}
+    for row in rows:
+        key = tuple(row.get(field, "") for field in group_by)
+        groups.setdefault(key, []).append(row)
+
+    out: list[dict[str, Any]] = []
+    for key in sorted(groups):
+        group_rows = groups[key]
+        aggregate = {field: value for field, value in zip(group_by, key, strict=True)}
+        aggregate["n"] = len(group_rows)
+        for output_name, source_name in metrics.items():
+            if output_name == "serviceable_rate":
+                aggregate[output_name] = serviceable_rate(group_rows)
+            else:
+                aggregate[output_name] = mean_metric(group_rows, source_name)
+        out.append(aggregate)
+    return out
+
+
+def write_story_csvs(root: Path, rows: list[dict[str, Any]]) -> None:
+    specs = {
+        "story_by_scenario.csv": (
+            ["scenario", "placement"],
+            {
+                "serviceable_rate": "serviceable",
+                "mean_benefit_network_vs_lake": "benefit_network_vs_lake",
+                "mean_benefit_network_vs_rerun": "benefit_network_vs_rerun",
+                "mean_ft_tax": "ft_tax",
+                "mean_stalled_request_pct_max": "stalled_request_pct_max",
+                "mean_break_even_storage_gbps": "break_even_storage_gbps",
+            },
+        ),
+        "story_by_capacity.csv": (
+            ["scenario", "placement", "capacity"],
+            {
+                "mean_benefit_network_vs_lake": "benefit_network_vs_lake",
+                "mean_ft_tax": "ft_tax",
+                "mean_break_even_storage_gbps": "break_even_storage_gbps",
+                "serviceable_rate": "serviceable",
+            },
+        ),
+        "story_by_storage.csv": (
+            ["scenario", "placement", "storage_read_gbps"],
+            {
+                "mean_benefit_network_vs_lake": "benefit_network_vs_lake",
+                "mean_repair_source_speedup_vs_lake": "repair_source_speedup_vs_lake",
+                "mean_break_even_storage_gbps": "break_even_storage_gbps",
+            },
+        ),
+        "story_by_scaleout.csv": (
+            ["scenario", "placement", "scaleout_gbps"],
+            {
+                "mean_benefit_network_vs_lake": "benefit_network_vs_lake",
+                "mean_network_repair_us": "network_repair_us",
+                "mean_data_lake_reload_us": "data_lake_reload_us",
+            },
+        ),
+        "story_by_decode.csv": (
+            ["scenario", "placement", "decode_steps_effective"],
+            {
+                "mean_T_network_repair_path": "T_network_repair_path",
+                "mean_T_data_lake_path": "T_data_lake_path",
+                "mean_benefit_network_vs_lake": "benefit_network_vs_lake",
+            },
+        ),
+        "story_heatmap_storage_scaleout.csv": (
+            ["scenario", "placement", "capacity", "storage_read_gbps", "scaleout_gbps"],
+            {
+                "mean_benefit_network_vs_lake": "benefit_network_vs_lake",
+                "mean_break_even_storage_gbps": "break_even_storage_gbps",
+            },
+        ),
+    }
+    for filename, (group_by, metrics) in specs.items():
+        aggregates = aggregate_rows(rows, group_by=group_by, metrics=metrics)
+        write_rows_csv(root / filename, aggregates, group_by + ["n"] + list(metrics.keys()))
 
 
 def run_sweep(args: argparse.Namespace) -> None:
     root = Path(args.out_dir)
-    if root.exists():
+    if root.exists() and not args.resume:
         shutil.rmtree(root)
-    root.mkdir(parents=True)
+    root.mkdir(parents=True, exist_ok=True)
     rows: list[dict[str, Any]] = []
+    scenarios = parse_csv(args.scenario)
     placements = parse_csv(args.placement)
     capacities = parse_int_csv(str(args.capacity))
     decode_steps = parse_int_csv(str(args.decode_steps))
     scaleout_values = parse_float_csv(str(args.scaleout_gbps))
     storage_values = parse_float_csv(str(args.storage_read_gbps))
-    for placement, capacity, steps, scaleout, storage in itertools.product(
-        placements, capacities, decode_steps, scaleout_values, storage_values
+    request_rerun_values = parse_float_csv(str(args.request_rerun_us))
+    stall_step_values = parse_float_csv(str(args.stall_step_us))
+    points: list[tuple[argparse.Namespace, Path]] = []
+    expanded_scenarios: list[tuple[str, list[dict[str, Any]] | None]] = []
+    for scenario in scenarios:
+        if scenario == "probabilistic":
+            if int(args.probabilistic_scenarios) <= 0:
+                fail("--scenario probabilistic requires --probabilistic-scenarios > 0")
+            for index in range(int(args.probabilistic_scenarios)):
+                expanded_scenarios.append(sampled_failure_scenario(args, index))
+        else:
+            expanded_scenarios.append((scenario, None))
+
+    for scenario_item, placement, capacity, steps, scaleout, storage, request_rerun_us, stall_step_us in itertools.product(
+        expanded_scenarios,
+        placements,
+        capacities,
+        decode_steps,
+        scaleout_values,
+        storage_values,
+        request_rerun_values,
+        stall_step_values,
     ):
+        scenario, events_override = scenario_item
+        if events_override is None:
+            validate_scenario_name(scenario)
         point = argparse.Namespace(**vars(args))
         point.sweep = False
+        point.scenario = scenario
+        point.events_override = events_override
         point.placement = placement
         point.capacity = capacity
         point.decode_steps = steps
         point.scaleout_gbps = scaleout
         point.storage_read_gbps = storage
+        point.request_rerun_us = request_rerun_us
+        point.stall_step_us = stall_step_us
+        if args.kv_penalty_per_stalled_request_us and not args.stall_step_us:
+            point.stall_step_us = args.kv_penalty_per_stalled_request_us
         params = {
-            "scenario": point.scenario,
+            "scenario": scenario,
             "placement": placement,
             "capacity": capacity,
             "decode_steps": steps,
             "scaleout_gbps": scaleout,
             "storage_read_gbps": storage,
+            "request_rerun_us": request_rerun_us,
+            "stall_step_us": stall_step_us,
         }
-        run_dir = root / combo_slug(params)
-        print(f"running {run_dir.name}")
-        rows.append(run_one(point, run_dir))
+        points.append((point, root / combo_slug(params)))
+
+    partial_path = root / "partial_sweep_results.csv"
+    final_path = root / "sweep_results.csv"
+    max_workers = max(1, int(args.workers))
+    with ThreadPoolExecutor(max_workers=max_workers) as ex:
+        futures = {ex.submit(run_or_resume_point, point, run_dir): (point, run_dir) for point, run_dir in points}
+        for fut in tqdm(as_completed(futures), total=len(futures), desc="sweep"):
+            point, run_dir = futures[fut]
+            try:
+                row = fut.result()
+            except BaseException as exc:
+                if isinstance(exc, KeyboardInterrupt):
+                    raise
+                if args.fail_fast:
+                    raise
+                row = error_row(point, run_dir, exc)
+                cleanup_point(run_dir, keep_raw=point.keep_raw, keep_logs=True, succeeded=False)
+            rows.append(row)
+            write_csv(partial_path, rows)
     write_csv(root / "sweep_results.csv", rows)
-    print(f"wrote {len(rows)} rows to {root / 'sweep_results.csv'}")
+    write_story_csvs(root, rows)
+    print(f"wrote {len(rows)} rows to {final_path}")
 
 
 def cmd_summarize(args: argparse.Namespace) -> None:
@@ -651,7 +1116,7 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--trace-root", required=True)
     run.add_argument("--benchmark", choices=["mmlu", "mmlu_ZH_CN"], required=True)
     run.add_argument("--subjects", required=True)
-    run.add_argument("--scenario", choices=["no_events", "node1_fail_join"], required=True)
+    run.add_argument("--scenario", required=True)
     run.add_argument("--placement", default="lazarus")
     run.add_argument("--capacity", default=16)
     run.add_argument("--decode-steps", default=32)
@@ -662,6 +1127,24 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--data-lake-fixed-us", type=float, default=0)
     run.add_argument("--data-lake-per-expert-us", type=float, default=0)
     run.add_argument("--kv-penalty-per-stalled-request-us", type=float, default=0)
+    run.add_argument("--request-rerun-us", default=0)
+    run.add_argument("--stall-step-us", default=0)
+    run.add_argument("--workers", type=int, default=min(32, os.cpu_count() or 1))
+    run.add_argument("--resume", action="store_true")
+    run.add_argument("--keep-raw", action="store_true")
+    run.add_argument("--keep-logs", action="store_true")
+    run.add_argument("--slim-artifacts", action="store_true")
+    run.add_argument("--fail-fast", action="store_true")
+    run.add_argument("--seed", type=int, default=0)
+    run.add_argument("--probabilistic-scenarios", type=int, default=0)
+    run.add_argument("--failure-seed", type=int, default=0)
+    run.add_argument("--failure-step-min", type=int, default=80)
+    run.add_argument("--failure-step-max", type=int, default=220)
+    run.add_argument("--join-delay-min", type=int, default=40)
+    run.add_argument("--join-delay-max", type=int, default=140)
+    run.add_argument("--no-join-prob", type=float, default=0.2)
+    run.add_argument("--node-failure-prob", type=float, default=0.55)
+    run.add_argument("--two-node-failure-prob", type=float, default=0.15)
     run.add_argument("--out-dir", required=True)
     run.add_argument("--sweep", action="store_true")
     run.set_defaults(func=cmd_run)
@@ -673,12 +1156,45 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def normalize_run_args(args: argparse.Namespace) -> None:
-    if args.command != "run" or args.sweep:
+    if args.command != "run":
         return
+    validate_scenario_list(args.scenario)
+    if args.kv_penalty_per_stalled_request_us and str(args.stall_step_us) in {"0", "0.0"}:
+        args.stall_step_us = args.kv_penalty_per_stalled_request_us
+    if args.failure_step_min > args.failure_step_max:
+        fail("--failure-step-min must be <= --failure-step-max")
+    if args.join_delay_min > args.join_delay_max:
+        fail("--join-delay-min must be <= --join-delay-max")
+    if not (0.0 <= args.no_join_prob <= 1.0):
+        fail("--no-join-prob must be between 0 and 1")
+    if args.node_failure_prob < 0.0 or args.two_node_failure_prob < 0.0:
+        fail("--node-failure-prob and --two-node-failure-prob must be non-negative")
+    if args.node_failure_prob + args.two_node_failure_prob > 1.0:
+        fail("--node-failure-prob + --two-node-failure-prob must be <= 1")
+    if args.sweep:
+        return
+    if args.scenario == "probabilistic":
+        scenario_id, events = sampled_failure_scenario(args, 0)
+        args.scenario = scenario_id
+        args.events_override = events
+    for name in (
+        "--scenario",
+        "--placement",
+        "--capacity",
+        "--decode-steps",
+        "--scaleout-gbps",
+        "--storage-read-gbps",
+        "--request-rerun-us",
+        "--stall-step-us",
+    ):
+        attr = name.removeprefix("--").replace("-", "_")
+        ensure_single_value(name, getattr(args, attr))
     args.capacity = int(args.capacity)
     args.decode_steps = int(args.decode_steps)
     args.scaleout_gbps = float(args.scaleout_gbps)
     args.storage_read_gbps = float(args.storage_read_gbps)
+    args.request_rerun_us = float(args.request_rerun_us)
+    args.stall_step_us = float(args.stall_step_us)
 
 
 def main() -> None:

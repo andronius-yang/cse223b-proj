@@ -1,0 +1,37 @@
+{
+  "capacities": [
+    16.0,
+    32.0,
+    48.0
+  ],
+  "decode_steps_effective": [
+    32.0,
+    128.0
+  ],
+  "deduped_rows": 737,
+  "outputs": [
+    "all_results.csv",
+    "coverage.csv",
+    "deduped_results.csv",
+    "paired_by_capacity.csv",
+    "paired_by_storage.csv",
+    "paired_results.csv",
+    "story_by_capacity.csv",
+    "story_by_decode.csv",
+    "story_by_scaleout.csv",
+    "story_by_scenario.csv",
+    "story_by_storage.csv",
+    "story_by_workload.csv"
+  ],
+  "paired_rows": 578,
+  "placements": [
+    "lazarus",
+    "uniform"
+  ],
+  "raw_rows": 737,
+  "scenarios": [
+    "node1_fail_join",
+    "rank4_fail_join"
+  ],
+  "serviceable_rate": 1.0
+}

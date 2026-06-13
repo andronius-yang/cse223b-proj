@@ -1,0 +1,13 @@
+scenario,placement,storage_read_gbps,benefit,n
+node1_fail_join,lazarus,3.5,423.7615214839301,76
+node1_fail_join,lazarus,14.0,110.48151139514434,72
+node1_fail_join,lazarus,50.0,29.74002309611752,76
+node1_fail_join,uniform,3.5,308.6308655122238,24
+node1_fail_join,uniform,14.0,87.30622586660445,20
+node1_fail_join,uniform,50.0,20.996661959681127,21
+rank4_fail_join,lazarus,3.5,127.43112210207607,76
+rank4_fail_join,lazarus,14.0,33.261268897713165,72
+rank4_fail_join,lazarus,50.0,8.948091994575279,76
+rank4_fail_join,uniform,3.5,186.20189987594887,76
+rank4_fail_join,uniform,14.0,48.77528597291874,72
+rank4_fail_join,uniform,50.0,13.06814230884929,76
