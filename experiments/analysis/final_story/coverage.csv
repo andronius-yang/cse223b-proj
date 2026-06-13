@@ -1,0 +1,12 @@
+scenario,placement,capacity,n
+node1_fail_join,lazarus,16,76
+node1_fail_join,lazarus,32,76
+node1_fail_join,lazarus,48,72
+node1_fail_join,uniform,16,61
+node1_fail_join,uniform,32,4
+rank4_fail_join,lazarus,16,76
+rank4_fail_join,lazarus,32,76
+rank4_fail_join,lazarus,48,72
+rank4_fail_join,uniform,16,76
+rank4_fail_join,uniform,32,76
+rank4_fail_join,uniform,48,72
