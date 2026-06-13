@@ -43,6 +43,9 @@ class ScenarioConfig:
     capacity_per_rank_per_layer: int
     replication_strategy: str
     events: list["NodeEvent"]
+    decode_steps: int = generate.DECODE_STEPS
+    input_glob: str = generate.INPUT_GLOB
+    output_dir: Path | None = None
 
 
 @dataclass(frozen=True)
@@ -142,15 +145,28 @@ def load_config(path: Path) -> ScenarioConfig:
     replication_strategy = data.get(
         "replication_strategy", DEFAULT_REPLICATION_STRATEGY
     )
+    decode_steps = require_int(
+        data.get("decode_steps", generate.DECODE_STEPS), "decode_steps"
+    )
+    input_glob = data.get("input_glob", generate.INPUT_GLOB)
+    output_dir_raw = data.get("output_dir")
     if replication_strategy not in REPLICATION_STRATEGIES:
         fail(
             f"replication_strategy must be one of "
             f"{sorted(REPLICATION_STRATEGIES)}, got {replication_strategy!r}"
         )
+    if not isinstance(input_glob, str) or not input_glob:
+        fail("input_glob must be a non-empty string")
+    if output_dir_raw is not None and (
+        not isinstance(output_dir_raw, str) or not output_dir_raw
+    ):
+        fail("output_dir must be a non-empty string when present")
     if ranks_per_node <= 0:
         fail("ranks_per_node must be positive")
     if capacity <= 0:
         fail("capacity_per_rank_per_layer must be positive")
+    if decode_steps <= 0:
+        fail("decode_steps must be positive")
     if generate.NUM_RANKS % ranks_per_node != 0:
         fail(
             f"NUM_RANKS={generate.NUM_RANKS} must be divisible by "
@@ -215,6 +231,9 @@ def load_config(path: Path) -> ScenarioConfig:
         capacity_per_rank_per_layer=capacity,
         replication_strategy=replication_strategy,
         events=events,
+        decode_steps=decode_steps,
+        input_glob=input_glob,
+        output_dir=Path(output_dir_raw) if output_dir_raw is not None else None,
     )
 
 
@@ -252,7 +271,10 @@ def flatten_selected_experts(
     return tuple(expert_ids)
 
 
-def build_workload(trace_paths: list[Path]) -> tuple[list[RequestStream], dict[int, list[float]]]:
+def build_workload(
+    trace_paths: list[Path],
+    decode_steps: int = generate.DECODE_STEPS,
+) -> tuple[list[RequestStream], dict[int, list[float]]]:
     streams: list[RequestStream] = []
     layer_loads: dict[int, list[float]] = {}
 
@@ -260,7 +282,7 @@ def build_workload(trace_paths: list[Path]) -> tuple[list[RequestStream], dict[i
         source_rank = request_index // generate.REQUESTS_PER_RANK
         local_request_index = request_index % generate.REQUESTS_PER_RANK
         trace = generate.load_trace(path)
-        last_token_index = min(generate.DECODE_STEPS, len(trace) - 1)
+        last_token_index = min(decode_steps, len(trace) - 1)
 
         work: list[WorkItem] = []
         for token_index in range(1, last_token_index + 1):
@@ -686,7 +708,7 @@ def write_terminal_failure(
 
 
 def run_scenario(config: ScenarioConfig, streams: list[RequestStream], plans: dict[int, LayerPlan]) -> int:
-    output_dir = SCENARIO_ROOT / config.scenario_id
+    output_dir = config.output_dir or (SCENARIO_ROOT / config.scenario_id)
     prepare_output_dir(output_dir)
 
     failed_ranks_set: set[int] = set()
@@ -725,10 +747,10 @@ def run_scenario(config: ScenarioConfig, streams: list[RequestStream], plans: di
                     "k_min": K_MIN,
                     "expert_state_bytes": EXPERT_STATE_BYTES,
                     "payload_bytes": generate.PAYLOAD_BYTES,
-                    "decode_steps": generate.DECODE_STEPS,
+                    "decode_steps": config.decode_steps,
                     "requests_per_rank": generate.REQUESTS_PER_RANK,
                     "batch_size": generate.BATCH_SIZE,
-                    "input_glob": generate.INPUT_GLOB,
+                    "input_glob": config.input_glob,
                 },
             }
             write_jsonl(timeline_handle, header)
@@ -897,14 +919,14 @@ def main() -> None:
     generate.validate_constants()
     config = load_config(Path(sys.argv[1]))
 
-    trace_paths = generate.discover_trace_paths()
+    trace_paths = generate.discover_trace_paths(config.input_glob)
     if len(trace_paths) < generate.BATCH_SIZE:
         fail(
             f"found {len(trace_paths)} trace files, need at least {generate.BATCH_SIZE} "
             f"for {generate.NUM_RANKS} ranks * {generate.REQUESTS_PER_RANK} requests per rank"
         )
 
-    streams, layer_loads = build_workload(trace_paths)
+    streams, layer_loads = build_workload(trace_paths, decode_steps=config.decode_steps)
     validate_event_completion(config, streams)
     plans = build_layer_plans(layer_loads, config)
     raise SystemExit(run_scenario(config, streams, plans))

@@ -12,3 +12,9 @@ traffic-gen/docs
 topsim/uv.lock
 
 **/tests/
+
+# experiment runs
+experiments/runs/
+
+## HF Artifacts
+**/traces_hf
