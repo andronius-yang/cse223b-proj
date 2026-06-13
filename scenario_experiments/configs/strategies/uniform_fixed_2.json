@@ -1,0 +1,10 @@
+{
+  "strategy_id": "uniform_fixed_2",
+  "label": "Uniform fixed 2",
+  "group": "uniform",
+  "description": "Load-agnostic uniform allocator with exactly two replicas per expert.",
+  "control_single_owner": false,
+  "replication_strategy": "uniform",
+  "capacity_per_rank_per_layer": 16,
+  "average_replicas_per_expert": 2
+}

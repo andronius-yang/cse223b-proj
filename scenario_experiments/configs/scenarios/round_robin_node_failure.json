@@ -1,0 +1,16 @@
+{
+  "scenario_id": "round_robin_node_failure",
+  "label": "Round-robin node failure",
+  "description": "Each 4-rank node fails and rejoins once, one node at a time.",
+  "ranks_per_node": 4,
+  "events": [
+    {"step": 100, "type": "fail", "ranks": [0, 1, 2, 3]},
+    {"step": 130, "type": "join", "ranks": [0, 1, 2, 3]},
+    {"step": 160, "type": "fail", "ranks": [4, 5, 6, 7]},
+    {"step": 190, "type": "join", "ranks": [4, 5, 6, 7]},
+    {"step": 220, "type": "fail", "ranks": [8, 9, 10, 11]},
+    {"step": 250, "type": "join", "ranks": [8, 9, 10, 11]},
+    {"step": 280, "type": "fail", "ranks": [12, 13, 14, 15]},
+    {"step": 310, "type": "join", "ranks": [12, 13, 14, 15]}
+  ]
+}

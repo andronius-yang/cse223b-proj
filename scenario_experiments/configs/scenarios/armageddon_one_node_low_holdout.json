@@ -1,0 +1,10 @@
+{
+  "scenario_id": "armageddon_one_node_low_holdout",
+  "label": "Armageddon one-node low holdout",
+  "description": "Fail nodes 1, 2, and 3, leaving only node 0 alive during the armageddon window before final recovery.",
+  "ranks_per_node": 4,
+  "events": [
+    {"step": 100, "type": "fail", "ranks": [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]},
+    {"step": 300, "type": "join", "ranks": [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]}
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "strategy_id": "adaptive_mro_avg3",
+  "label": "Adaptive MRO avg 3",
+  "group": "adaptive_mro",
+  "description": "Load-proportional adaptive allocation with MRO placement and an average of three replicas per expert.",
+  "control_single_owner": false,
+  "replication_strategy": "adaptive",
+  "capacity_per_rank_per_layer": 24,
+  "average_replicas_per_expert": 3
+}

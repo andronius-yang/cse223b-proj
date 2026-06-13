@@ -1,0 +1,7 @@
+{
+  "scenario_id": "no_fail",
+  "label": "No failure",
+  "description": "Healthy control timeline with no rank events.",
+  "ranks_per_node": 4,
+  "events": []
+}

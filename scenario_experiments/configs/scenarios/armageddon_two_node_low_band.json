@@ -1,0 +1,10 @@
+{
+  "scenario_id": "armageddon_two_node_low_band",
+  "label": "Armageddon two-node low-band",
+  "description": "Fail nodes 2 and 3, leaving only nodes 0 and 1 alive during the armageddon window before final recovery.",
+  "ranks_per_node": 4,
+  "events": [
+    {"step": 100, "type": "fail", "ranks": [8, 9, 10, 11, 12, 13, 14, 15]},
+    {"step": 300, "type": "join", "ranks": [8, 9, 10, 11, 12, 13, 14, 15]}
+  ]
+}

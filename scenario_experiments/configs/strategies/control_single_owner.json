@@ -1,0 +1,9 @@
+{
+  "strategy_id": "control_single_owner",
+  "label": "Single-owner control",
+  "group": "control",
+  "description": "Experiment-only no-replica placement that keeps each expert only on its contiguous baseline owner rank.",
+  "control_single_owner": true,
+  "capacity_per_rank_per_layer": 8,
+  "average_replicas_per_expert": 1
+}

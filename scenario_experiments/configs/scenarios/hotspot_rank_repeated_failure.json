@@ -1,0 +1,20 @@
+{
+  "scenario_id": "hotspot_rank_repeated_failure",
+  "label": "Repeated rank-0 failure",
+  "description": "Rank 0 repeatedly fails and rejoins to stress recovery of one owner region.",
+  "ranks_per_node": 4,
+  "events": [
+    {"step": 100, "type": "fail", "ranks": [0]},
+    {"step": 108, "type": "join", "ranks": [0]},
+    {"step": 132, "type": "fail", "ranks": [0]},
+    {"step": 140, "type": "join", "ranks": [0]},
+    {"step": 164, "type": "fail", "ranks": [0]},
+    {"step": 172, "type": "join", "ranks": [0]},
+    {"step": 196, "type": "fail", "ranks": [0]},
+    {"step": 204, "type": "join", "ranks": [0]},
+    {"step": 228, "type": "fail", "ranks": [0]},
+    {"step": 236, "type": "join", "ranks": [0]},
+    {"step": 260, "type": "fail", "ranks": [0]},
+    {"step": 268, "type": "join", "ranks": [0]}
+  ]
+}

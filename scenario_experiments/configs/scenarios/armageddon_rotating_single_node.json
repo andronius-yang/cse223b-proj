@@ -1,0 +1,17 @@
+{
+  "scenario_id": "armageddon_rotating_single_node",
+  "label": "Armageddon rotating single-node",
+  "description": "Rotate the live set through one or two nodes at a time, then recover all ranks so the workload can complete.",
+  "ranks_per_node": 4,
+  "events": [
+    {"step": 80, "type": "fail", "ranks": [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]},
+    {"step": 140, "type": "join", "ranks": [8, 9, 10, 11]},
+    {"step": 170, "type": "fail", "ranks": [0, 1, 2, 3]},
+    {"step": 230, "type": "join", "ranks": [12, 13, 14, 15]},
+    {"step": 260, "type": "fail", "ranks": [8, 9, 10, 11]},
+    {"step": 320, "type": "join", "ranks": [4, 5, 6, 7]},
+    {"step": 350, "type": "fail", "ranks": [12, 13, 14, 15]},
+    {"step": 410, "type": "join", "ranks": [0, 1, 2, 3]},
+    {"step": 440, "type": "join", "ranks": [8, 9, 10, 11, 12, 13, 14, 15]}
+  ]
+}
